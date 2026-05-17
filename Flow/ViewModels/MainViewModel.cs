@@ -67,9 +67,31 @@ public partial class MainViewModel : ObservableObject
     // ── Lane commands ─────────────────────────────────────────────────────
 
     [RelayCommand]
-    private void AddLane()
+    private void AddLane() => Lanes.Add(new LaneViewModel(NextLaneName()));
+
+    public Guid AddNewLane()
     {
-        Lanes.Add(new LaneViewModel($"レーン {Lanes.Count + 1}"));
+        var lane = new LaneViewModel(NextLaneName());
+        Lanes.Add(lane);
+        return lane.Id;
+    }
+
+    public void ReorderLane(int fromIndex, int toIndex)
+    {
+        if (fromIndex < 0 || fromIndex >= Lanes.Count) return;
+        if (toIndex   < 0 || toIndex   >= Lanes.Count) return;
+        Lanes.Move(fromIndex, toIndex);
+    }
+
+    private string NextLaneName()
+    {
+        const string prefix = "レーン ";
+        int max = Lanes
+            .Select(l => l.Name)
+            .Where(n => n.StartsWith(prefix) && int.TryParse(n[prefix.Length..], out _))
+            .Select(n => int.Parse(n[prefix.Length..]))
+            .DefaultIfEmpty(0).Max();
+        return $"{prefix}{max + 1}";
     }
 
     [RelayCommand]

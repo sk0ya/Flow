@@ -62,31 +62,44 @@ public partial class GanttCanvas : UserControl
     private const double TimeHeaderH  = 30;
     private const double ResizeW      = 8;
     private const double MinBarW      = 4;
+    private const double AddLaneZoneH = 32;
 
     // ── Colors ────────────────────────────────────────────────────────────
-    private static readonly Brush BgWhite     = Brushes.White;
-    private static readonly Brush LaneHdrBg   = new SolidColorBrush(Color.FromRgb(248, 249, 250));
-    private static readonly Brush TimeHdrBg   = new SolidColorBrush(Color.FromRgb(242, 244, 248));
-    private static readonly Brush EvenRow     = new SolidColorBrush(Color.FromArgb(15, 66, 133, 244));
-    private static readonly Brush GridMinor   = new SolidColorBrush(Color.FromRgb(235, 237, 242));
-    private static readonly Brush GridMajor   = new SolidColorBrush(Color.FromRgb(210, 215, 225));
-    private static readonly Brush Divider     = new SolidColorBrush(Color.FromRgb(200, 204, 212));
-    private static readonly Brush NormalBar   = new SolidColorBrush(Color.FromRgb(66, 133, 244));
-    private static readonly Brush ErrorBarFg  = new SolidColorBrush(Color.FromRgb(229, 115, 115));
-    private static readonly Brush ArrowBr     = new SolidColorBrush(Color.FromArgb(140, 90, 90, 90));
-    private static readonly Brush DarkText    = new SolidColorBrush(Color.FromRgb(32, 33, 36));
-    private static readonly Brush MutedText   = new SolidColorBrush(Color.FromRgb(95, 99, 104));
-    private static readonly Brush DropLine    = new SolidColorBrush(Color.FromRgb(66, 133, 244));
+    private static readonly Brush BgWhite    = Brushes.White;
+    private static readonly Brush LaneHdrBg  = new SolidColorBrush(Color.FromRgb(248, 249, 250));
+    private static readonly Brush TimeHdrBg  = new SolidColorBrush(Color.FromRgb(242, 244, 248));
+    private static readonly Brush EvenRow    = new SolidColorBrush(Color.FromArgb(15, 66, 133, 244));
+    private static readonly Brush GridMinor  = new SolidColorBrush(Color.FromRgb(235, 237, 242));
+    private static readonly Brush GridMajor  = new SolidColorBrush(Color.FromRgb(210, 215, 225));
+    private static readonly Brush Divider    = new SolidColorBrush(Color.FromRgb(200, 204, 212));
+    private static readonly Brush NormalBar  = new SolidColorBrush(Color.FromRgb(66, 133, 244));
+    private static readonly Brush ErrorBarFg = new SolidColorBrush(Color.FromRgb(229, 115, 115));
+    private static readonly Brush DarkText   = new SolidColorBrush(Color.FromRgb(32, 33, 36));
+    private static readonly Brush MutedText  = new SolidColorBrush(Color.FromRgb(95, 99, 104));
+    private static readonly Brush DropLine   = new SolidColorBrush(Color.FromRgb(66, 133, 244));
 
     // ── Drag state ────────────────────────────────────────────────────────
     private ItemViewModel? _dragItem;
-    private enum DragMode { None, Move, Resize }
+    private enum DragMode { None, Move, Resize, LaneReorder }
     private DragMode _drag = DragMode.None;
-    private double _dragStartMouseX, _dragStartMouseY;
-    private double _dragOriginStart;   // item's StartTime at drag begin
+    private double _dragStartMouseY;
+    private double _dragOriginStart;
     private double _dragOriginDuration;
-    private double _dragMouseOffsetX;  // mouse X offset within the bar (for Move)
+    private double _dragMouseOffsetX;
     private int    _dragLaneIdx;
+    private bool   _dragToNewLane;
+
+    // Lane reorder state
+    private int _reorderSourceLane = -1;
+    private int _reorderDropLane   = -1;
+
+    // Lane rename state
+    private LaneViewModel? _renamingLane;
+    private TextBox?       _renameBox;
+
+    // Callbacks set in code-behind
+    public Func<Guid>?         AddLaneFunc           { get; set; }
+    public Action<int, int>?   ReorderLanesCallback  { get; set; }
 
     // ── Cached rects ─────────────────────────────────────────────────────
     private readonly Dictionary<Guid, Rect> _barRects = new();
@@ -95,9 +108,9 @@ public partial class GanttCanvas : UserControl
     {
         InitializeComponent();
         RootCanvas.PreviewMouseLeftButtonDown += OnMouseDown;
-        RootCanvas.MouseMove           += OnMouseMove;
-        RootCanvas.MouseLeftButtonUp   += OnMouseUp;
-        RootCanvas.MouseLeave          += (_, _) => CommitDrag();
+        RootCanvas.MouseMove                  += OnMouseMove;
+        RootCanvas.MouseLeftButtonUp          += OnMouseUp;
+        RootCanvas.MouseLeave                 += (_, _) => CommitDrag();
     }
 
     // ── Collection subscription ───────────────────────────────────────────
@@ -115,6 +128,8 @@ public partial class GanttCanvas : UserControl
 
     public void Render()
     {
+        if (_renamingLane != null) return; // preserve TextBox overlay while renaming
+
         RootCanvas.Children.Clear();
         _barRects.Clear();
 
@@ -122,11 +137,11 @@ public partial class GanttCanvas : UserControl
         var lanes = Lanes?.ToList() ?? new();
         if (lanes.Count == 0) lanes.Add(new LaneViewModel("レーン 1"));
 
-        double ppu   = PixelsPerUnit;
-        double total = Math.Max(TotalDuration, 1);
+        double ppu    = PixelsPerUnit;
+        double total  = Math.Max(TotalDuration, 1);
         int    nLanes = lanes.Count;
         double totalW = LaneHeaderW + total * ppu + 20;
-        double totalH = TimeHeaderH + nLanes * LaneH + 20;
+        double totalH = TimeHeaderH + nLanes * LaneH + AddLaneZoneH + 20;
 
         // 1. White background
         Add(Rect(totalW, totalH, BgWhite), 0, 0);
@@ -142,21 +157,19 @@ public partial class GanttCanvas : UserControl
             if (i % 2 == 0)
                 Add(Rect(totalW - LaneHeaderW, LaneH, EvenRow), LaneHeaderW, TimeHeaderH + i * LaneH);
 
-        // 5. Minor grid lines at 0.5 unit intervals
+        // 5. Minor grid lines
         for (double t = 0.5; t < total; t += 0.5)
         {
-            if (Math.Abs(t % 1) < 0.01) continue; // skip major (drawn separately)
+            if (Math.Abs(t % 1) < 0.01) continue;
             double x = LaneHeaderW + t * ppu;
             Add(VLine(x, TimeHeaderH, totalH, GridMinor, 0.5), 0, 0);
         }
 
-        // 6. Major vertical grid lines at each integer unit
+        // 6. Major vertical grid lines and time labels
         for (int t = 0; t <= (int)total; t++)
         {
             double x = LaneHeaderW + t * ppu;
             Add(VLine(x, 0, totalH, t == 0 ? Divider : GridMajor, t == 0 ? 1 : 0.8), 0, 0);
-
-            // Time label
             Add(new TextBlock
             {
                 Text = t.ToString(), FontSize = 11,
@@ -164,7 +177,6 @@ public partial class GanttCanvas : UserControl
             }, x - 20, (TimeHeaderH - 15) / 2);
         }
 
-        // Unit label at top right of header
         Add(new TextBlock
         {
             Text = $"（{TimeUnit}）", FontSize = 10, Foreground = MutedText,
@@ -180,31 +192,55 @@ public partial class GanttCanvas : UserControl
         // 9. Lane header column divider
         Add(VLine(LaneHeaderW, 0, totalH, Divider, 1), 0, 0);
 
-        // 10. "タスク" label in header
+        // 10. "タスク" column header
         Add(new TextBlock
         {
             Text = "タスク", FontSize = 11, FontWeight = FontWeights.SemiBold,
             Foreground = MutedText, Width = LaneHeaderW, TextAlignment = TextAlignment.Center,
         }, 0, (TimeHeaderH - 15) / 2);
 
-        // 11. Lane labels
+        // 11. Lane labels with drag-grip hint
         var laneIndexMap = new Dictionary<Guid, int>();
         for (int i = 0; i < nLanes; i++)
         {
             laneIndexMap[lanes[i].Id] = i;
             double rowY = TimeHeaderH + i * LaneH;
+            bool isActiveLane    = SelectedItem != null && SelectedItem.LaneId == lanes[i].Id;
+            bool isReorderSource = _drag == DragMode.LaneReorder && _reorderSourceLane == i;
 
-            // Selected highlight for lane of selected item
-            bool isActiveLane = SelectedItem != null && SelectedItem.LaneId == lanes[i].Id;
+            // Grip icon
+            Add(new TextBlock
+            {
+                Text = "⠿", FontSize = 10, Cursor = Cursors.SizeNS,
+                Foreground = new SolidColorBrush(Color.FromArgb(100, 95, 99, 104)),
+            }, 5, rowY + (LaneH - 14) / 2);
 
+            // Lane name
             Add(new TextBlock
             {
                 Text = lanes[i].Name, FontSize = 12,
                 FontWeight = isActiveLane ? FontWeights.SemiBold : FontWeights.Normal,
                 Foreground = DarkText,
-                Width = LaneHeaderW - 16, TextAlignment = TextAlignment.Right,
+                Opacity = isReorderSource ? 0.3 : 1.0,
+                Width = LaneHeaderW - 20, TextAlignment = TextAlignment.Right,
                 TextTrimming = TextTrimming.CharacterEllipsis,
-            }, 4, rowY + (LaneH - 15) / 2);
+            }, 18, rowY + (LaneH - 15) / 2);
+
+            // Dim overlay on source row during reorder
+            if (isReorderSource)
+                Add(new Rectangle
+                {
+                    Width = totalW, Height = LaneH,
+                    Fill = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255)),
+                }, 0, rowY);
+        }
+
+        // 11b. Lane reorder drop indicator
+        if (_drag == DragMode.LaneReorder && _reorderDropLane >= 0)
+        {
+            double lineY = TimeHeaderH + _reorderDropLane * LaneH;
+            Add(new Ellipse { Width = 10, Height = 10, Fill = DropLine }, 1, lineY - 5);
+            Add(new Rectangle { Width = totalW - 2, Height = 2, Fill = DropLine }, 11, lineY - 1);
         }
 
         // 12. Compute bar rects
@@ -218,19 +254,22 @@ public partial class GanttCanvas : UserControl
             _barRects[item.Id] = new Rect(bx, by, bw, BarH);
         }
 
-        // 13. Dependency arrows (drawn before bars)
+        // 13. Dependency arrows (before bars)
         DrawArrows(itemMap);
 
         // 14. Task bars
         foreach (var item in items.OrderBy(i => i.StartTime))
         {
-            bool isGhost = _drag != DragMode.None && _dragItem?.Id == item.Id;
+            bool isGhost = _drag == DragMode.Move && _dragItem?.Id == item.Id;
             DrawBar(item, isGhost);
         }
 
         // 15. Drag ghost indicator
-        if (_drag != DragMode.None && _dragItem != null)
-            DrawDragGhost(_dragItem, laneIndexMap, ppu);
+        if (_drag == DragMode.Move && _dragItem != null)
+            DrawDragGhost(_dragItem, ppu);
+
+        // 16. "Add lane" zone at the bottom
+        DrawAddLaneZone(totalW);
 
         RootCanvas.Width  = totalW;
         RootCanvas.Height = totalH;
@@ -261,7 +300,6 @@ public partial class GanttCanvas : UserControl
             ClipToBounds = true,
         };
 
-        // Name label inside bar
         if (r.Width > 24)
         {
             bar.Child = new TextBlock
@@ -276,7 +314,6 @@ public partial class GanttCanvas : UserControl
 
         Add(bar, r.Left, r.Top);
 
-        // Resize handle (right edge)
         if (!ghost && r.Width > ResizeW * 2)
         {
             var handle = new Border
@@ -290,11 +327,10 @@ public partial class GanttCanvas : UserControl
         }
     }
 
-    private void DrawDragGhost(ItemViewModel item, Dictionary<Guid, int> laneMap, double ppu)
+    private void DrawDragGhost(ItemViewModel item, double ppu)
     {
-        if (!_barRects.TryGetValue(item.Id, out var r)) return;
+        if (!_barRects.ContainsKey(item.Id)) return;
 
-        // Current drag position bar
         double ghostX = LaneHeaderW + item.StartTime * ppu;
         double ghostW = Math.Max(item.Duration * ppu, MinBarW);
         double ghostY = TimeHeaderH + _dragLaneIdx * LaneH + (LaneH - BarH) / 2.0;
@@ -307,6 +343,106 @@ public partial class GanttCanvas : UserControl
             BorderBrush = DropLine, BorderThickness = new Thickness(2),
         }, ghostX, ghostY);
     }
+
+    private void DrawAddLaneZone(double totalW)
+    {
+        var lanes = Lanes?.ToList() ?? new();
+        double zoneY  = TimeHeaderH + lanes.Count * LaneH;
+        bool   active = _dragToNewLane;
+
+        Brush hdrBg  = active ? new SolidColorBrush(Color.FromArgb(55, 66, 133, 244)) : new SolidColorBrush(Color.FromRgb(245, 247, 250));
+        Brush zoneBg = active ? new SolidColorBrush(Color.FromArgb(40, 66, 133, 244)) : new SolidColorBrush(Color.FromArgb(10, 66, 133, 244));
+        Brush border = active ? DropLine : new SolidColorBrush(Color.FromRgb(220, 225, 235));
+        Brush txtFg  = active ? DropLine : new SolidColorBrush(Color.FromRgb(148, 158, 178));
+
+        var hdr = new Border
+        {
+            Width = LaneHeaderW, Height = AddLaneZoneH,
+            Background = hdrBg, BorderBrush = border,
+            BorderThickness = new Thickness(0, 1, 1, 0),
+            Cursor = AddLaneFunc != null ? Cursors.Hand : Cursors.Arrow,
+            Child = new TextBlock
+            {
+                Text = "+ 新しいレーン", FontSize = 10, Foreground = txtFg,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment   = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 10, 0),
+            }
+        };
+        var zone = new Border
+        {
+            Width = totalW - LaneHeaderW, Height = AddLaneZoneH,
+            Background = zoneBg, BorderBrush = border,
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Cursor = AddLaneFunc != null ? Cursors.Hand : Cursors.Arrow,
+        };
+
+        if (AddLaneFunc != null)
+        {
+            hdr.MouseLeftButtonDown  += OnAddLaneZoneClick;
+            zone.MouseLeftButtonDown += OnAddLaneZoneClick;
+        }
+
+        Add(hdr,  0,           zoneY);
+        Add(zone, LaneHeaderW, zoneY);
+    }
+
+    private void OnAddLaneZoneClick(object sender, MouseButtonEventArgs e)
+    {
+        if (_drag != DragMode.None) return;
+        AddLaneFunc?.Invoke();
+        e.Handled = true;
+    }
+
+    // ── Lane rename ───────────────────────────────────────────────────────
+
+    private void StartLaneRename(LaneViewModel lane, int laneIndex)
+    {
+        _renamingLane = lane;
+
+        double boxY = TimeHeaderH + laneIndex * LaneH + (LaneH - 24) / 2.0;
+
+        _renameBox = new TextBox
+        {
+            Text = lane.Name,
+            Width = LaneHeaderW - 10, Height = 24,
+            FontSize = 11,
+            Padding = new Thickness(5, 2, 5, 2),
+            BorderBrush = DropLine, BorderThickness = new Thickness(1.5),
+            Background = Brushes.White,
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        _renameBox.KeyDown   += OnRenameKeyDown;
+        _renameBox.LostFocus += OnRenameLostFocus;
+
+        Canvas.SetLeft(_renameBox, 4);
+        Canvas.SetTop(_renameBox, boxY);
+        RootCanvas.Children.Add(_renameBox);
+        _renameBox.Focus();
+        _renameBox.SelectAll();
+    }
+
+    private void CommitRename(bool cancel = false)
+    {
+        if (_renamingLane == null || _renameBox == null) return;
+        if (!cancel)
+        {
+            var name = _renameBox.Text.Trim();
+            if (!string.IsNullOrEmpty(name)) _renamingLane.Name = name;
+        }
+        RootCanvas.Children.Remove(_renameBox);
+        _renameBox    = null;
+        _renamingLane = null;
+        Render();
+    }
+
+    private void OnRenameKeyDown(object sender, KeyEventArgs e)
+    {
+        if      (e.Key == Key.Return) { CommitRename();              e.Handled = true; }
+        else if (e.Key == Key.Escape) { CommitRename(cancel: true);  e.Handled = true; }
+    }
+
+    private void OnRenameLostFocus(object sender, RoutedEventArgs e) => CommitRename();
 
     // ── Arrows ────────────────────────────────────────────────────────────
 
@@ -355,7 +491,6 @@ public partial class GanttCanvas : UserControl
                 Points = new PointCollection { new(x2, y2), new(x2-8, y2-4), new(x2-8, y2+4) },
             }, 0, 0);
 
-            // Condition label
             if (!string.IsNullOrEmpty(edge.Condition))
             {
                 var lbl = new Border
@@ -376,8 +511,6 @@ public partial class GanttCanvas : UserControl
 
     // ── Collision avoidance ───────────────────────────────────────────────
 
-    // Returns a StartTime that fits the item in targetLaneId without overlapping other items,
-    // while staying as close as possible to proposedStart.
     private double FindValidStart(ItemViewModel item, double proposedStart, Guid targetLaneId)
     {
         double dur    = item.Duration;
@@ -386,24 +519,19 @@ public partial class GanttCanvas : UserControl
             .OrderBy(i => i.StartTime)
             .ToList() ?? new();
 
-        // Build free gaps: list of (gapStart, gapEnd)
-        var gaps = new List<(double s, double e)>();
-        double cursor = 0;
+        var gaps   = new List<(double s, double e)>();
+        double cur = 0;
         foreach (var o in others)
         {
-            if (o.StartTime > cursor + 1e-9)
-                gaps.Add((cursor, o.StartTime));
-            cursor = Math.Max(cursor, o.StartTime + o.Duration);
+            if (o.StartTime > cur + 1e-9) gaps.Add((cur, o.StartTime));
+            cur = Math.Max(cur, o.StartTime + o.Duration);
         }
-        gaps.Add((cursor, double.MaxValue));
+        gaps.Add((cur, double.MaxValue));
 
-        // Keep only gaps wide enough for the item
         var validGaps = gaps.Where(g => g.e - g.s >= dur - 1e-9).ToList();
         if (validGaps.Count == 0) return Math.Max(0, proposedStart);
 
-        // Pick the gap that minimises |clampedStart - proposedStart|
-        double best = validGaps[0].s;
-        double bestDist = double.MaxValue;
+        double best = validGaps[0].s, bestDist = double.MaxValue;
         foreach (var g in validGaps)
         {
             double clamped = Math.Clamp(proposedStart, g.s, g.e - dur);
@@ -413,7 +541,6 @@ public partial class GanttCanvas : UserControl
         return Math.Max(0, best);
     }
 
-    // Returns a Duration that doesn't cause the item to overlap the next item in its lane.
     private double FindValidDuration(ItemViewModel item, double proposedDuration)
     {
         var next = ItemsSource?
@@ -430,17 +557,45 @@ public partial class GanttCanvas : UserControl
 
     private void OnMouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (_renamingLane != null) return;
+
         var pos = e.GetPosition(RootCanvas);
+
+        // ── Lane header area (left strip, below time header) ──────────────
+        if (pos.X < LaneHeaderW && pos.Y >= TimeHeaderH)
+        {
+            int laneIdx = GetLaneIndex(pos.Y);
+            var lanes   = Lanes?.ToList() ?? new();
+
+            if (laneIdx >= 0 && laneIdx < lanes.Count)
+            {
+                if (e.ClickCount == 2)
+                {
+                    StartLaneRename(lanes[laneIdx], laneIdx);
+                    e.Handled = true;
+                    return;
+                }
+                _reorderSourceLane = laneIdx;
+                _reorderDropLane   = laneIdx;
+                _dragStartMouseY   = pos.Y;
+                _drag = DragMode.LaneReorder;
+                RootCanvas.CaptureMouse();
+                e.Handled = true;
+                return;
+            }
+            return; // click in time header or add-lane zone header
+        }
+
+        // ── Item hit test ─────────────────────────────────────────────────
         var item = HitTestItem(pos);
         if (item == null) { SelectedItem = null; return; }
 
-        SelectedItem = item;
-        _dragItem = item;
-        _dragStartMouseX = pos.X;
-        _dragStartMouseY = pos.Y;
+        SelectedItem        = item;
+        _dragItem           = item;
+        _dragStartMouseY    = pos.Y;
         _dragOriginStart    = item.StartTime;
         _dragOriginDuration = item.Duration;
-        _dragLaneIdx = GetLaneIndex(pos.Y);
+        _dragLaneIdx        = GetLaneIndex(pos.Y);
 
         if (_barRects.TryGetValue(item.Id, out var r) && pos.X >= r.Right - ResizeW)
             _drag = DragMode.Resize;
@@ -458,11 +613,22 @@ public partial class GanttCanvas : UserControl
     private void OnMouseMove(object sender, MouseEventArgs e)
     {
         var pos = e.GetPosition(RootCanvas);
-
-        // Update cursor
         UpdateCursor(pos);
 
-        if (_drag == DragMode.None || _dragItem == null) return;
+        if (_drag == DragMode.None) return;
+
+        if (_drag == DragMode.LaneReorder)
+        {
+            var lanes  = Lanes?.ToList() ?? new();
+            int rawLi  = GetLaneIndex(pos.Y);
+            double localY = (pos.Y - TimeHeaderH) - rawLi * LaneH;
+            int dropPos   = localY < LaneH / 2.0 ? rawLi : rawLi + 1;
+            _reorderDropLane = Math.Clamp(dropPos, 0, lanes.Count);
+            Render();
+            return;
+        }
+
+        if (_dragItem == null) return;
 
         double ppu = PixelsPerUnit;
 
@@ -471,16 +637,25 @@ public partial class GanttCanvas : UserControl
             var lanes = Lanes?.ToList() ?? new();
             if (lanes.Count == 0) return;
 
-            int li = Math.Clamp(GetLaneIndex(pos.Y), 0, lanes.Count - 1);
-            _dragLaneIdx = li;
-            var targetLaneId = lanes[li].Id;
-
             double rawStart = (pos.X - LaneHeaderW) / ppu - _dragMouseOffsetX;
             rawStart = Snap(rawStart);
-            double validStart = FindValidStart(_dragItem, rawStart, targetLaneId);
 
-            _dragItem.StartTime = validStart;
-            _dragItem.LaneId    = targetLaneId;
+            int rawLi = GetLaneIndex(pos.Y);
+            if (rawLi >= lanes.Count && AddLaneFunc != null)
+            {
+                _dragToNewLane      = true;
+                _dragLaneIdx        = lanes.Count;
+                _dragItem.StartTime = Math.Max(0, rawStart);
+            }
+            else
+            {
+                _dragToNewLane = false;
+                int li = Math.Clamp(rawLi, 0, lanes.Count - 1);
+                _dragLaneIdx = li;
+                var targetLaneId = lanes[li].Id;
+                _dragItem.StartTime = FindValidStart(_dragItem, rawStart, targetLaneId);
+                _dragItem.LaneId    = targetLaneId;
+            }
         }
         else if (_drag == DragMode.Resize)
         {
@@ -500,8 +675,25 @@ public partial class GanttCanvas : UserControl
 
     private void CommitDrag()
     {
-        _drag     = DragMode.None;
-        _dragItem = null;
+        if (_drag == DragMode.LaneReorder)
+        {
+            var lanes = Lanes?.ToList() ?? new();
+            int from  = _reorderSourceLane;
+            int to    = _reorderDropLane <= from ? _reorderDropLane : _reorderDropLane - 1;
+            if (from != to && from >= 0 && from < lanes.Count && to >= 0 && to < lanes.Count)
+                ReorderLanesCallback?.Invoke(from, to);
+            _reorderSourceLane = -1;
+            _reorderDropLane   = -1;
+        }
+        else if (_dragToNewLane && _dragItem != null && AddLaneFunc != null)
+        {
+            var newLaneId = AddLaneFunc();
+            _dragItem.LaneId = newLaneId;
+        }
+
+        _dragToNewLane = false;
+        _drag          = DragMode.None;
+        _dragItem      = null;
         RootCanvas.ReleaseMouseCapture();
         Render();
     }
@@ -509,6 +701,16 @@ public partial class GanttCanvas : UserControl
     private void UpdateCursor(Point pos)
     {
         if (_drag != DragMode.None) return;
+
+        // Lane header area → reorder cursor
+        if (pos.X < LaneHeaderW && pos.Y >= TimeHeaderH)
+        {
+            int laneIdx = GetLaneIndex(pos.Y);
+            var lanes   = Lanes?.ToList() ?? new();
+            RootCanvas.Cursor = (laneIdx >= 0 && laneIdx < lanes.Count) ? Cursors.SizeNS : Cursors.Arrow;
+            return;
+        }
+
         var item = HitTestItem(pos);
         if (item == null) { RootCanvas.Cursor = Cursors.Arrow; return; }
         if (_barRects.TryGetValue(item.Id, out var r) && pos.X >= r.Right - ResizeW)
@@ -522,7 +724,6 @@ public partial class GanttCanvas : UserControl
     private ItemViewModel? HitTestItem(Point pos)
     {
         var items = ItemsSource?.ToList() ?? new();
-        // Reverse order so top-most (last rendered) is checked first
         foreach (var item in items.OrderByDescending(i => i.StartTime))
             if (_barRects.TryGetValue(item.Id, out var r) && r.Contains(pos))
                 return item;

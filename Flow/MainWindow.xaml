@@ -266,8 +266,7 @@
             <Grid Grid.Column="0" Background="White">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/> <!-- Add task -->
-                    <RowDefinition Height="Auto"/> <!-- Lane management -->
-                    <RowDefinition Height="Auto"/> <!-- Separator -->
+                    <RowDefinition Height="Auto"/> <!-- Axis settings -->
                     <RowDefinition Height="Auto"/> <!-- Editor header -->
                     <RowDefinition Height="*"/>    <!-- Editor body -->
                     <RowDefinition Height="Auto"/> <!-- Undo toast -->
@@ -295,61 +294,8 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Lane management -->
-                <Border Grid.Row="1" Background="White" BorderBrush="#EEE" BorderThickness="0,0,0,1" Padding="10,8">
-                    <StackPanel>
-                        <Grid Margin="0,0,0,6">
-                            <TextBlock Text="レーン" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="#5F6368" VerticalAlignment="Center"/>
-                            <Button Content="+ 追加" HorizontalAlignment="Right"
-                                    FontSize="10" Padding="7,3" Style="{StaticResource FlatBtn}"
-                                    Command="{Binding AddLaneCommand}"/>
-                        </Grid>
-                        <ItemsControl ItemsSource="{Binding Lanes}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate DataType="{x:Type vm:LaneViewModel}">
-                                    <Grid Margin="0,2">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBox Style="{StaticResource InputBox}"
-                                                 Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
-                                                 FontSize="11" Padding="6,4"/>
-                                        <Button Grid.Column="1" Content="✕" FontSize="10"
-                                                Width="24" Height="24" Margin="4,0,0,0"
-                                                Cursor="Hand" Background="Transparent"
-                                                BorderThickness="0" Foreground="#9AA0A6"
-                                                Command="{Binding DataContext.DeleteLaneCommand,
-                                                    RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}">
-                                            <Button.Style>
-                                                <Style TargetType="Button">
-                                                    <Setter Property="Template">
-                                                        <Setter.Value>
-                                                            <ControlTemplate TargetType="Button">
-                                                                <TextBlock Text="✕" Foreground="{TemplateBinding Foreground}" FontSize="10"
-                                                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                                <ControlTemplate.Triggers>
-                                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                                        <Setter Property="Foreground" Value="#F44336"/>
-                                                                    </Trigger>
-                                                                </ControlTemplate.Triggers>
-                                                            </ControlTemplate>
-                                                        </Setter.Value>
-                                                    </Setter>
-                                                </Style>
-                                            </Button.Style>
-                                        </Button>
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </Border>
-
-                <!-- Separator + axis settings -->
-                <Border Grid.Row="2" Background="#F8F9FA" BorderBrush="#EEE" BorderThickness="0,0,0,1" Padding="10,8">
+                <!-- Axis settings -->
+                <Border Grid.Row="1" Background="#F8F9FA" BorderBrush="#EEE" BorderThickness="0,0,0,1" Padding="10,8">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -376,7 +322,7 @@
                 </Border>
 
                 <!-- Editor header -->
-                <Border Grid.Row="3" Padding="10,6"
+                <Border Grid.Row="2" Padding="10,6"
                         Background="#F0F4FF" BorderBrush="#DDE8FF" BorderThickness="0,0,0,1">
                     <Border.Style>
                         <Style TargetType="Border">
@@ -399,7 +345,7 @@
                 </Border>
 
                 <!-- Empty state -->
-                <Border Grid.Row="4" Margin="16,30" Padding="14"
+                <Border Grid.Row="3" Margin="16,30" Padding="14"
                         Background="#F8F9FA" CornerRadius="10"
                         BorderBrush="#E8EAED" BorderThickness="1">
                     <Border.Style>
@@ -425,7 +371,7 @@
                 </Border>
 
                 <!-- Item editor -->
-                <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto"
+                <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto"
                               DataContext="{Binding SelectedItem}">
                     <ScrollViewer.Style>
                         <Style TargetType="ScrollViewer">
@@ -547,7 +493,7 @@
                 </ScrollViewer>
 
                 <!-- Undo toast -->
-                <Border Grid.Row="5" Padding="12,8" Margin="8,4,8,6"
+                <Border Grid.Row="4" Padding="12,8" Margin="8,4,8,6"
                         Background="#323232" CornerRadius="8"
                         Visibility="{Binding CanUndoDelete, Converter={StaticResource BoolVis}}">
                     <Grid>
