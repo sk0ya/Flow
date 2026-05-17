@@ -68,6 +68,29 @@
             </Style.Triggers>
         </Style>
 
+        <Style x:Key="ProjectIconBtn" TargetType="Button" BasedOn="{StaticResource FlatBtn}">
+            <Setter Property="Width" Value="46"/>
+            <Setter Property="Height" Value="46"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="Foreground" Value="#5F6368"/>
+            <Setter Property="Background" Value="#F8F9FA"/>
+            <Setter Property="BorderBrush" Value="#E2E6EE"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#EEF2FF"/>
+                    <Setter Property="BorderBrush" Value="#CCD7F4"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="#E3EAFF"/>
+                    <Setter Property="BorderBrush" Value="#B7C8F0"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <Style x:Key="InputBox" TargetType="TextBox">
             <Setter Property="Padding" Value="7,5"/>
             <Setter Property="FontSize" Value="12"/>
@@ -407,22 +430,33 @@
                     <Border Grid.Row="0" Background="#F8F9FA" BorderBrush="#EEE" BorderThickness="0,0,0,1" Padding="12,8">
                         <TextBlock Text="プロジェクト" FontSize="10" FontWeight="SemiBold" Foreground="#5F6368"/>
                     </Border>
-                    <StackPanel Grid.Row="1" Margin="10,10,10,6">
-                        <Button Content="新しいプロジェクト" Style="{StaticResource FlatBtn}"
-                                Command="{Binding NewProjectCommand}"
-                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                Margin="0,0,0,4"/>
-                        <Button Content="プロジェクトを開く" Style="{StaticResource FlatBtn}"
-                                Command="{Binding OpenProjectCommand}"
-                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                Margin="0,0,0,4"/>
-                        <Button Content="保存" Style="{StaticResource FlatBtn}"
-                                Command="{Binding SaveProjectCommand}"
-                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                Margin="0,0,0,4"/>
-                        <Button Content="名前を付けて保存" Style="{StaticResource FlatBtn}"
-                                Command="{Binding SaveProjectAsCommand}"
-                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"/>
+                    <StackPanel Grid.Row="1" Margin="12,12,12,8">
+                        <Border Background="#F8F9FA" BorderBrush="#EEE" BorderThickness="1" CornerRadius="10" Padding="10">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                                    <Button Style="{StaticResource ProjectIconBtn}"
+                                            Command="{Binding NewProjectCommand}"
+                                            ToolTip="新しいプロジェクト"
+                                            Content="&#xE710;"
+                                            Margin="0,0,6,0"/>
+                                    <Button Style="{StaticResource ProjectIconBtn}"
+                                            Command="{Binding OpenProjectCommand}"
+                                            ToolTip="プロジェクトを開く"
+                                            Content="&#xE8E5;"
+                                            Margin="0,0,6,0"/>
+                                    <Button Style="{StaticResource ProjectIconBtn}"
+                                            Command="{Binding SaveProjectCommand}"
+                                            ToolTip="保存"
+                                            Content="&#xE74E;"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding CurrentFilePath, TargetNullValue=未保存のプロジェクト}"
+                                           FontSize="10"
+                                           Foreground="#9AA0A6"
+                                           Margin="0,10,0,0"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding CurrentFilePath}"/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                     <Border Grid.Row="2" Margin="12,0" Padding="0,10"
                             BorderBrush="#EEE" BorderThickness="0,1,0,0">
