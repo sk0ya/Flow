@@ -12,6 +12,8 @@ namespace Flow.ViewModels;
 
 public record SuggestionItem(string Value, string Source);
 
+public enum SidebarPanel { ProjectList, ProjectSettings, TaskEditor }
+
 public partial class MainViewModel : ObservableObject
 {
     private readonly DependencyService _dep  = new();
@@ -41,6 +43,36 @@ public partial class MainViewModel : ObservableObject
     public string WindowTitle => CurrentFilePath != null
         ? $"Flow — {System.IO.Path.GetFileNameWithoutExtension(CurrentFilePath)}"
         : "Flow";
+
+    // ── Sidebar panel ─────────────────────────────────────────────────────
+
+    private SidebarPanel _activeSidebarPanel = SidebarPanel.TaskEditor;
+
+    public bool IsProjectListActive
+    {
+        get => _activeSidebarPanel == SidebarPanel.ProjectList;
+        set { if (value) SetActivePanel(SidebarPanel.ProjectList); }
+    }
+
+    public bool IsProjectSettingsActive
+    {
+        get => _activeSidebarPanel == SidebarPanel.ProjectSettings;
+        set { if (value) SetActivePanel(SidebarPanel.ProjectSettings); }
+    }
+
+    public bool IsTaskEditorActive
+    {
+        get => _activeSidebarPanel == SidebarPanel.TaskEditor;
+        set { if (value) SetActivePanel(SidebarPanel.TaskEditor); }
+    }
+
+    private void SetActivePanel(SidebarPanel panel)
+    {
+        _activeSidebarPanel = panel;
+        OnPropertyChanged(nameof(IsProjectListActive));
+        OnPropertyChanged(nameof(IsProjectSettingsActive));
+        OnPropertyChanged(nameof(IsTaskEditorActive));
+    }
 
     public MainViewModel()
     {
@@ -136,7 +168,11 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void SelectItem(ItemViewModel? vm) => SelectedItem = vm;
+    private void SelectItem(ItemViewModel? vm)
+    {
+        SelectedItem = vm;
+        if (vm != null) SetActivePanel(SidebarPanel.TaskEditor);
+    }
 
     [RelayCommand]
     private async Task DeleteItem(ItemViewModel? item)

@@ -193,6 +193,45 @@
                 </StackPanel>
             </Border>
         </DataTemplate>
+        <Style x:Key="ActivityBtn" TargetType="RadioButton">
+            <Setter Property="Width" Value="48"/>
+            <Setter Property="Height" Value="48"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="GroupName" Value="ActivityBar"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid>
+                            <Border x:Name="Bg" Background="Transparent"/>
+                            <Border x:Name="Bar" Width="3" HorizontalAlignment="Left"
+                                    Background="Transparent" CornerRadius="0,2,2,0"/>
+                            <TextBlock x:Name="Ico"
+                                       Text="{TemplateBinding Content}"
+                                       FontSize="18"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Foreground="#858585"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Ico" Property="Foreground" Value="White"/>
+                                <Setter TargetName="Bar" Property="Background" Value="#4285F4"/>
+                                <Setter TargetName="Bg" Property="Background" Value="#37373D"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                    <Condition Property="IsChecked" Value="False"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Bg" Property="Background" Value="#3C3C3C"/>
+                                <Setter TargetName="Ico" Property="Foreground" Value="#CCCCCC"/>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -257,272 +296,339 @@
         <!-- ════ MAIN ════ -->
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="270" MinWidth="200" MaxWidth="400"/>
+                <ColumnDefinition Width="48"/>
+                <ColumnDefinition Width="270" MinWidth="160" MaxWidth="400"/>
                 <ColumnDefinition Width="5"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- ── LEFT PANEL ── -->
-            <Grid Grid.Column="0" Background="White">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/> <!-- Add task -->
-                    <RowDefinition Height="Auto"/> <!-- Axis settings -->
-                    <RowDefinition Height="Auto"/> <!-- Editor header -->
-                    <RowDefinition Height="*"/>    <!-- Editor body -->
-                    <RowDefinition Height="Auto"/> <!-- Undo toast -->
-                </Grid.RowDefinitions>
+            <!-- ── ACTIVITY BAR ── -->
+            <Border Grid.Column="0" Background="#252526" BorderBrush="#1A1A1A" BorderThickness="0,0,1,0">
+                <StackPanel VerticalAlignment="Top" Margin="0,4,0,0">
+                    <RadioButton Style="{StaticResource ActivityBtn}"
+                                 Content="☰"
+                                 IsChecked="{Binding IsProjectListActive, Mode=TwoWay}"
+                                 ToolTip="プロジェクト"/>
+                    <RadioButton Style="{StaticResource ActivityBtn}"
+                                 Content="⚙"
+                                 IsChecked="{Binding IsProjectSettingsActive, Mode=TwoWay}"
+                                 ToolTip="プロジェクト設定"/>
+                    <RadioButton Style="{StaticResource ActivityBtn}"
+                                 Content="✏"
+                                 IsChecked="{Binding IsTaskEditorActive, Mode=TwoWay}"
+                                 ToolTip="タスク編集"/>
+                </StackPanel>
+            </Border>
 
-                <!-- Add task -->
-                <Border Grid.Row="0" Background="#F8F9FA" BorderBrush="#EEE" BorderThickness="0,0,0,1" Padding="10,10">
-                    <StackPanel>
-                        <TextBlock Text="タスクを追加" FontSize="10" FontWeight="SemiBold"
-                                   Foreground="#5F6368" Margin="0,0,0,5"/>
+            <!-- ── SIDEBAR ── -->
+            <Grid Grid.Column="1" Background="White">
+
+                <!-- Panel: プロジェクト一覧 -->
+                <Grid Visibility="{Binding IsProjectListActive, Converter={StaticResource BoolVis}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Border Grid.Row="0" Background="#F8F9FA" BorderBrush="#EEE" BorderThickness="0,0,0,1" Padding="12,8">
+                        <TextBlock Text="プロジェクト" FontSize="10" FontWeight="SemiBold" Foreground="#5F6368"/>
+                    </Border>
+                    <StackPanel Grid.Row="1" Margin="10,10,10,6">
+                        <Button Content="新しいプロジェクト" Style="{StaticResource FlatBtn}"
+                                Command="{Binding NewProjectCommand}"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                Margin="0,0,0,4"/>
+                        <Button Content="プロジェクトを開く" Style="{StaticResource FlatBtn}"
+                                Command="{Binding OpenProjectCommand}"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                Margin="0,0,0,4"/>
+                        <Button Content="保存" Style="{StaticResource FlatBtn}"
+                                Command="{Binding SaveProjectCommand}"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                Margin="0,0,0,4"/>
+                        <Button Content="名前を付けて保存" Style="{StaticResource FlatBtn}"
+                                Command="{Binding SaveProjectAsCommand}"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"/>
+                    </StackPanel>
+                    <Border Grid.Row="2" Margin="12,0" Padding="0,10"
+                            BorderBrush="#EEE" BorderThickness="0,1,0,0">
+                        <StackPanel>
+                            <TextBlock Text="最近使ったファイル" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="#9AA0A6" Margin="0,0,0,6"/>
+                            <TextBlock Text="（なし）" FontSize="10" Foreground="#C5C5C5" FontStyle="Italic"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Panel: プロジェクト設定 -->
+                <Grid Visibility="{Binding IsProjectSettingsActive, Converter={StaticResource BoolVis}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Border Grid.Row="0" Background="#F8F9FA" BorderBrush="#EEE" BorderThickness="0,0,0,1" Padding="12,8">
+                        <TextBlock Text="プロジェクト設定" FontSize="10" FontWeight="SemiBold" Foreground="#5F6368"/>
+                    </Border>
+                    <StackPanel Grid.Row="1" Margin="12,12,12,0">
+                        <TextBlock Text="プロジェクト名" FontSize="10" FontWeight="SemiBold"
+                                   Foreground="#5F6368" Margin="0,0,0,4"/>
+                        <TextBox Style="{StaticResource InputBox}" FontSize="12"
+                                 Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="時間単位" FontSize="10" FontWeight="SemiBold"
+                                   Foreground="#5F6368" Margin="0,14,0,4"/>
+                        <ComboBox ItemsSource="{x:Static vm:MainViewModel.TimeUnitOptions}"
+                                  SelectedItem="{Binding TimeUnit}"
+                                  FontSize="12" Height="30" VerticalContentAlignment="Center"/>
+                        <TextBlock Text="全体期間" FontSize="10" FontWeight="SemiBold"
+                                   Foreground="#5F6368" Margin="0,14,0,4"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBox Style="{StaticResource InputBox}"
-                                     Text="{Binding NewItemName, UpdateSourceTrigger=PropertyChanged}">
-                                <TextBox.InputBindings>
-                                    <KeyBinding Key="Return" Command="{Binding AddItemCommand}"/>
-                                </TextBox.InputBindings>
-                            </TextBox>
-                            <Button Grid.Column="1" Content="+ 追加" Style="{StaticResource PrimaryBtn}"
-                                    Margin="5,0,0,0" Command="{Binding AddItemCommand}"/>
+                            <TextBox Style="{StaticResource InputBox}" FontSize="12"
+                                     Text="{Binding TotalDuration, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding TimeUnit}" FontSize="11"
+                                       Foreground="#9AA0A6" VerticalAlignment="Center" Margin="6,0,0,0"/>
                         </Grid>
                     </StackPanel>
-                </Border>
+                </Grid>
 
-                <!-- Axis settings -->
-                <Border Grid.Row="1" Background="#F8F9FA" BorderBrush="#EEE" BorderThickness="0,0,0,1" Padding="10,8">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="単位" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="#5F6368" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <ComboBox ItemsSource="{x:Static vm:MainViewModel.TimeUnitOptions}"
-                                      SelectedItem="{Binding TimeUnit}"
-                                      FontSize="11" Width="70" Height="26"
+                <!-- Panel: タスク編集 -->
+                <Grid Visibility="{Binding IsTaskEditorActive, Converter={StaticResource BoolVis}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Add task -->
+                    <Border Grid.Row="0" Background="#F8F9FA" BorderBrush="#EEE" BorderThickness="0,0,0,1" Padding="10,10">
+                        <StackPanel>
+                            <TextBlock Text="タスクを追加" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="#5F6368" Margin="0,0,0,5"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Style="{StaticResource InputBox}"
+                                         Text="{Binding NewItemName, UpdateSourceTrigger=PropertyChanged}">
+                                    <TextBox.InputBindings>
+                                        <KeyBinding Key="Return" Command="{Binding AddItemCommand}"/>
+                                    </TextBox.InputBindings>
+                                </TextBox>
+                                <Button Grid.Column="1" Content="+ 追加" Style="{StaticResource PrimaryBtn}"
+                                        Margin="5,0,0,0" Command="{Binding AddItemCommand}"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Editor header -->
+                    <Border Grid.Row="1" Padding="10,6"
+                            Background="#F0F4FF" BorderBrush="#DDE8FF" BorderThickness="0,0,0,1">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedItem}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Grid>
+                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#4285F4" VerticalAlignment="Center">
+                                <Run Text="✏  "/>
+                                <Run Text="{Binding SelectedItem.Name, Mode=OneWay, FallbackValue=''}"/>
+                            </TextBlock>
+                            <TextBlock Text="Delete で削除" FontSize="9" Foreground="#9AA0A6"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Empty state -->
+                    <Border Grid.Row="2" Margin="16,30" Padding="14"
+                            Background="#F8F9FA" CornerRadius="10"
+                            BorderBrush="#E8EAED" BorderThickness="1">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedItem}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel>
+                            <TextBlock Text="タスクを選択" FontSize="12" FontWeight="SemiBold"
+                                       Foreground="#5F6368" HorizontalAlignment="Center"/>
+                            <TextBlock Text="ガントのバーをクリックすると編集できます"
+                                       FontSize="10" Foreground="#9AA0A6" TextWrapping="Wrap"
+                                       Margin="0,5,0,0" TextAlignment="Center"/>
+                            <TextBlock Text="バーをドラッグ → 時刻・レーン変更&#xa;右端をドラッグ → 長さ変更"
+                                       FontSize="10" Foreground="#9AA0A6" TextWrapping="Wrap"
+                                       Margin="0,4,0,0" TextAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Item editor -->
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                                  DataContext="{Binding SelectedItem}">
+                        <ScrollViewer.Style>
+                            <Style TargetType="ScrollViewer">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ScrollViewer.Style>
+
+                        <StackPanel Margin="10,8,10,4">
+
+                            <!-- Name -->
+                            <TextBlock Text="名前" FontSize="10" FontWeight="SemiBold" Foreground="#5F6368" Margin="0,0,0,4"/>
+                            <TextBox Style="{StaticResource InputBox}" FontSize="13"
+                                     Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <!-- Timing row -->
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="開始" FontSize="10" FontWeight="SemiBold"
+                                               Foreground="#5F6368" Margin="0,0,0,4"/>
+                                    <TextBox Style="{StaticResource InputBox}" FontSize="12"
+                                             Text="{Binding StartTime, StringFormat=F1, UpdateSourceTrigger=PropertyChanged}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="所要時間" FontSize="10" FontWeight="SemiBold"
+                                               Foreground="#5F6368" Margin="0,0,0,4"/>
+                                    <TextBox Style="{StaticResource InputBox}" FontSize="12"
+                                             Text="{Binding Duration, StringFormat=F1, UpdateSourceTrigger=PropertyChanged}"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Lane selector -->
+                            <TextBlock Text="レーン" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="#5F6368" Margin="0,10,0,4"/>
+                            <ComboBox ItemsSource="{Binding DataContext.Lanes, RelativeSource={RelativeSource AncestorType=Window}}"
+                                      SelectedValuePath="Id"
+                                      SelectedValue="{Binding LaneId}"
+                                      DisplayMemberPath="Name"
+                                      FontSize="12" Height="30"
                                       VerticalContentAlignment="Center"/>
+
+                            <!-- Description -->
+                            <TextBlock Text="説明（任意）" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="#5F6368" Margin="0,10,0,4"/>
+                            <TextBox Style="{StaticResource InputBox}" FontSize="11"
+                                     Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
+                                     AcceptsReturn="True" MaxLines="3" MinHeight="40" TextWrapping="Wrap"/>
+
+                            <!-- Pre-conditions -->
+                            <Grid Margin="0,10,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="事前条件" FontSize="11" FontWeight="Bold" Foreground="#1565C0" VerticalAlignment="Center"/>
+                                    <Border Background="#E3F2FD" CornerRadius="8" Padding="5,1" Margin="5,0,0,0">
+                                        <TextBlock Text="{Binding PreConditions.Count}" FontSize="9" Foreground="#4285F4"/>
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="開始前に必要" FontSize="9" Foreground="#9AA0A6" VerticalAlignment="Center"/>
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding PreConditions}" ItemTemplate="{StaticResource PreChip}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBox x:Name="PreCondInputBox" Style="{StaticResource InputBox}" FontSize="11"
+                                         Text="{Binding NewPreCondition, UpdateSourceTrigger=PropertyChanged}"
+                                         TextChanged="OnPreCondInputChanged" LostFocus="OnCondInputLostFocus"
+                                         PreviewKeyDown="OnCondInputKeyDown">
+                                    <TextBox.InputBindings><KeyBinding Key="Return" Command="{Binding AddPreConditionCommand}"/></TextBox.InputBindings>
+                                </TextBox>
+                                <Button Grid.Column="1" Content="追加" Margin="4,0,0,0"
+                                        Style="{StaticResource FlatBtn}" FontSize="11" Padding="7,4"
+                                        Command="{Binding AddPreConditionCommand}"/>
+                            </Grid>
+
+                            <!-- Post-conditions -->
+                            <Grid Margin="0,10,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="事後条件" FontSize="11" FontWeight="Bold" Foreground="#2E7D32" VerticalAlignment="Center"/>
+                                    <Border Background="#E8F5E9" CornerRadius="8" Padding="5,1" Margin="5,0,0,0">
+                                        <TextBlock Text="{Binding PostConditions.Count}" FontSize="9" Foreground="#388E3C"/>
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="完了後の状態" FontSize="9" Foreground="#9AA0A6" VerticalAlignment="Center"/>
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding PostConditions}" ItemTemplate="{StaticResource PostChip}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                            <Grid Margin="0,4,0,12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBox x:Name="PostCondInputBox" Style="{StaticResource InputBox}" FontSize="11"
+                                         Text="{Binding NewPostCondition, UpdateSourceTrigger=PropertyChanged}"
+                                         TextChanged="OnPostCondInputChanged" LostFocus="OnCondInputLostFocus"
+                                         PreviewKeyDown="OnCondInputKeyDown">
+                                    <TextBox.InputBindings><KeyBinding Key="Return" Command="{Binding AddPostConditionCommand}"/></TextBox.InputBindings>
+                                </TextBox>
+                                <Button Grid.Column="1" Content="追加" Margin="4,0,0,0"
+                                        Style="{StaticResource FlatBtn}" FontSize="11" Padding="7,4"
+                                        Command="{Binding AddPostConditionCommand}"/>
+                            </Grid>
+
                         </StackPanel>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="全体" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="#5F6368" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                            <TextBox Style="{StaticResource InputBox}" Width="52"
-                                     Text="{Binding TotalDuration, UpdateSourceTrigger=PropertyChanged}"
-                                     FontSize="11" Padding="5,4"/>
-                            <TextBlock Text="{Binding TimeUnit}" FontSize="10" Foreground="#9AA0A6"
-                                       VerticalAlignment="Center" Margin="4,0,0,0"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
+                    </ScrollViewer>
 
-                <!-- Editor header -->
-                <Border Grid.Row="2" Padding="10,6"
-                        Background="#F0F4FF" BorderBrush="#DDE8FF" BorderThickness="0,0,0,1">
-                    <Border.Style>
-                        <Style TargetType="Border">
-                            <Setter Property="Visibility" Value="Collapsed"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding SelectedItem}" Value="{x:Null}">
-                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
-                    <Grid>
-                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#4285F4" VerticalAlignment="Center">
-                            <Run Text="✏  "/>
-                            <Run Text="{Binding SelectedItem.Name, Mode=OneWay, FallbackValue=''}"/>
-                        </TextBlock>
-                        <TextBlock Text="Delete で削除" FontSize="9" Foreground="#9AA0A6"
-                                   HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                    </Grid>
-                </Border>
-
-                <!-- Empty state -->
-                <Border Grid.Row="3" Margin="16,30" Padding="14"
-                        Background="#F8F9FA" CornerRadius="10"
-                        BorderBrush="#E8EAED" BorderThickness="1">
-                    <Border.Style>
-                        <Style TargetType="Border">
-                            <Setter Property="Visibility" Value="Collapsed"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding SelectedItem}" Value="{x:Null}">
-                                    <Setter Property="Visibility" Value="Visible"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
-                    <StackPanel>
-                        <TextBlock Text="タスクを選択" FontSize="12" FontWeight="SemiBold"
-                                   Foreground="#5F6368" HorizontalAlignment="Center"/>
-                        <TextBlock Text="ガントのバーをクリックすると編集できます"
-                                   FontSize="10" Foreground="#9AA0A6" TextWrapping="Wrap"
-                                   Margin="0,5,0,0" TextAlignment="Center"/>
-                        <TextBlock Text="バーをドラッグ → 時刻・レーン変更&#xa;右端をドラッグ → 長さ変更"
-                                   FontSize="10" Foreground="#9AA0A6" TextWrapping="Wrap"
-                                   Margin="0,4,0,0" TextAlignment="Center"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Item editor -->
-                <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto"
-                              DataContext="{Binding SelectedItem}">
-                    <ScrollViewer.Style>
-                        <Style TargetType="ScrollViewer">
-                            <Setter Property="Visibility" Value="Visible"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding}" Value="{x:Null}">
-                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ScrollViewer.Style>
-
-                    <StackPanel Margin="10,8,10,4">
-
-                        <!-- Name -->
-                        <TextBlock Text="名前" FontSize="10" FontWeight="SemiBold" Foreground="#5F6368" Margin="0,0,0,4"/>
-                        <TextBox Style="{StaticResource InputBox}" FontSize="13"
-                                 Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
-
-                        <!-- Timing row -->
-                        <Grid Margin="0,10,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="8"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0">
-                                <TextBlock Text="開始" FontSize="10" FontWeight="SemiBold"
-                                           Foreground="#5F6368" Margin="0,0,0,4"/>
-                                <TextBox Style="{StaticResource InputBox}" FontSize="12"
-                                         Text="{Binding StartTime, StringFormat=F1, UpdateSourceTrigger=PropertyChanged}"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="2">
-                                <TextBlock Text="所要時間" FontSize="10" FontWeight="SemiBold"
-                                           Foreground="#5F6368" Margin="0,0,0,4"/>
-                                <TextBox Style="{StaticResource InputBox}" FontSize="12"
-                                         Text="{Binding Duration, StringFormat=F1, UpdateSourceTrigger=PropertyChanged}"/>
-                            </StackPanel>
+                    <!-- Undo toast -->
+                    <Border Grid.Row="3" Padding="12,8" Margin="8,4,8,6"
+                            Background="#323232" CornerRadius="8"
+                            Visibility="{Binding CanUndoDelete, Converter={StaticResource BoolVis}}">
+                        <Grid>
+                            <TextBlock Text="{Binding UndoMessage}" Foreground="White" FontSize="11" VerticalAlignment="Center"/>
+                            <Button Content="元に戻す" HorizontalAlignment="Right"
+                                    FontSize="11" FontWeight="SemiBold"
+                                    Foreground="#82B1FF" Background="Transparent" BorderThickness="0"
+                                    Cursor="Hand" Command="{Binding UndoDeleteCommand}">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <TextBlock Text="元に戻す" Foreground="{TemplateBinding Foreground}"
+                                                   FontSize="{TemplateBinding FontSize}" FontWeight="{TemplateBinding FontWeight}"/>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Foreground" Value="White"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
                         </Grid>
+                    </Border>
+                </Grid>
 
-                        <!-- Lane selector -->
-                        <TextBlock Text="レーン" FontSize="10" FontWeight="SemiBold"
-                                   Foreground="#5F6368" Margin="0,10,0,4"/>
-                        <ComboBox ItemsSource="{Binding DataContext.Lanes, RelativeSource={RelativeSource AncestorType=Window}}"
-                                  SelectedValuePath="Id"
-                                  SelectedValue="{Binding LaneId}"
-                                  DisplayMemberPath="Name"
-                                  FontSize="12" Height="30"
-                                  VerticalContentAlignment="Center"/>
-
-                        <!-- Description -->
-                        <TextBlock Text="説明（任意）" FontSize="10" FontWeight="SemiBold"
-                                   Foreground="#5F6368" Margin="0,10,0,4"/>
-                        <TextBox Style="{StaticResource InputBox}" FontSize="11"
-                                 Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
-                                 AcceptsReturn="True" MaxLines="3" MinHeight="40" TextWrapping="Wrap"/>
-
-                        <!-- Pre-conditions -->
-                        <Grid Margin="0,10,0,4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="事前条件" FontSize="11" FontWeight="Bold" Foreground="#1565C0" VerticalAlignment="Center"/>
-                                <Border Background="#E3F2FD" CornerRadius="8" Padding="5,1" Margin="5,0,0,0">
-                                    <TextBlock Text="{Binding PreConditions.Count}" FontSize="9" Foreground="#4285F4"/>
-                                </Border>
-                            </StackPanel>
-                            <TextBlock Grid.Column="1" Text="開始前に必要" FontSize="9" Foreground="#9AA0A6" VerticalAlignment="Center"/>
-                        </Grid>
-                        <ItemsControl ItemsSource="{Binding PreConditions}" ItemTemplate="{StaticResource PreChip}">
-                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                        </ItemsControl>
-                        <Grid Margin="0,4,0,0">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBox x:Name="PreCondInputBox" Style="{StaticResource InputBox}" FontSize="11"
-                                     Text="{Binding NewPreCondition, UpdateSourceTrigger=PropertyChanged}"
-                                     TextChanged="OnPreCondInputChanged" LostFocus="OnCondInputLostFocus"
-                                     PreviewKeyDown="OnCondInputKeyDown">
-                                <TextBox.InputBindings><KeyBinding Key="Return" Command="{Binding AddPreConditionCommand}"/></TextBox.InputBindings>
-                            </TextBox>
-                            <Button Grid.Column="1" Content="追加" Margin="4,0,0,0"
-                                    Style="{StaticResource FlatBtn}" FontSize="11" Padding="7,4"
-                                    Command="{Binding AddPreConditionCommand}"/>
-                        </Grid>
-
-                        <!-- Post-conditions -->
-                        <Grid Margin="0,10,0,4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="事後条件" FontSize="11" FontWeight="Bold" Foreground="#2E7D32" VerticalAlignment="Center"/>
-                                <Border Background="#E8F5E9" CornerRadius="8" Padding="5,1" Margin="5,0,0,0">
-                                    <TextBlock Text="{Binding PostConditions.Count}" FontSize="9" Foreground="#388E3C"/>
-                                </Border>
-                            </StackPanel>
-                            <TextBlock Grid.Column="1" Text="完了後の状態" FontSize="9" Foreground="#9AA0A6" VerticalAlignment="Center"/>
-                        </Grid>
-                        <ItemsControl ItemsSource="{Binding PostConditions}" ItemTemplate="{StaticResource PostChip}">
-                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                        </ItemsControl>
-                        <Grid Margin="0,4,0,12">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBox x:Name="PostCondInputBox" Style="{StaticResource InputBox}" FontSize="11"
-                                     Text="{Binding NewPostCondition, UpdateSourceTrigger=PropertyChanged}"
-                                     TextChanged="OnPostCondInputChanged" LostFocus="OnCondInputLostFocus"
-                                     PreviewKeyDown="OnCondInputKeyDown">
-                                <TextBox.InputBindings><KeyBinding Key="Return" Command="{Binding AddPostConditionCommand}"/></TextBox.InputBindings>
-                            </TextBox>
-                            <Button Grid.Column="1" Content="追加" Margin="4,0,0,0"
-                                    Style="{StaticResource FlatBtn}" FontSize="11" Padding="7,4"
-                                    Command="{Binding AddPostConditionCommand}"/>
-                        </Grid>
-
-                    </StackPanel>
-                </ScrollViewer>
-
-                <!-- Undo toast -->
-                <Border Grid.Row="4" Padding="12,8" Margin="8,4,8,6"
-                        Background="#323232" CornerRadius="8"
-                        Visibility="{Binding CanUndoDelete, Converter={StaticResource BoolVis}}">
-                    <Grid>
-                        <TextBlock Text="{Binding UndoMessage}" Foreground="White" FontSize="11" VerticalAlignment="Center"/>
-                        <Button Content="元に戻す" HorizontalAlignment="Right"
-                                FontSize="11" FontWeight="SemiBold"
-                                Foreground="#82B1FF" Background="Transparent" BorderThickness="0"
-                                Cursor="Hand" Command="{Binding UndoDeleteCommand}">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <TextBlock Text="元に戻す" Foreground="{TemplateBinding Foreground}"
-                                               FontSize="{TemplateBinding FontSize}" FontWeight="{TemplateBinding FontWeight}"/>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="Foreground" Value="White"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
-                        </Button>
-                    </Grid>
-                </Border>
             </Grid>
 
-            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+            <GridSplitter Grid.Column="2" Width="5" HorizontalAlignment="Stretch"
                           Background="#DDE3EE" Cursor="SizeWE"/>
 
             <!-- ── RIGHT: Gantt canvas ── -->
-            <controls:GanttCanvas Grid.Column="2"
+            <controls:GanttCanvas Grid.Column="3"
                                   x:Name="GanttView"
                                   ItemsSource="{Binding Items}"
                                   Edges="{Binding DependencyEdges}"
