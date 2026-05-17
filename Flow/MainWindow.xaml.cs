@@ -14,10 +14,14 @@ public partial class MainWindow : Window
     private bool     _isPre;
     private bool     _suppressPopup;
 
-    public MainWindow()
+    public MainWindow() : this(null)
+    {
+    }
+
+    public MainWindow(string? startupProjectPath)
     {
         InitializeComponent();
-        var vm = new MainViewModel();
+        var vm = new MainViewModel(startupProjectPath);
         DataContext = vm;
         GanttView.AddLaneFunc          = vm.AddNewLane;
         GanttView.ReorderLanesCallback = vm.ReorderLane;

@@ -355,7 +355,51 @@
                         <StackPanel>
                             <TextBlock Text="最近使ったファイル" FontSize="10" FontWeight="SemiBold"
                                        Foreground="#9AA0A6" Margin="0,0,0,6"/>
-                            <TextBlock Text="（なし）" FontSize="10" Foreground="#C5C5C5" FontStyle="Italic"/>
+                            <ItemsControl ItemsSource="{Binding RecentProjects}">
+                                <ItemsControl.Style>
+                                    <Style TargetType="ItemsControl">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasRecentProjects}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ItemsControl.Style>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:RecentProjectEntry}">
+                                        <Button Style="{StaticResource FlatBtn}"
+                                                Command="{Binding DataContext.OpenRecentProjectCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Left"
+                                                Margin="0,0,0,6"
+                                                Padding="10,8">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding DisplayName}"
+                                                           FontSize="12"
+                                                           Foreground="#202124"/>
+                                                <TextBlock Text="{Binding DirectoryPath}"
+                                                           FontSize="10"
+                                                           Foreground="#9AA0A6"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="（なし）" FontSize="10" Foreground="#C5C5C5" FontStyle="Italic">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasRecentProjects}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                         </StackPanel>
                     </Border>
                 </Grid>
