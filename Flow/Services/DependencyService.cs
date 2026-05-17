@@ -60,7 +60,7 @@ public class DependencyService
                         if (provEnd > item.StartTime + 1e-9)
                             errors.Add(new ValidationError(
                                 ValidationErrorType.TimeViolation, item.Id, k,
-                                $"依存順序エラー: 「{prov.Name}」（終了 {provEnd:F1}）より前に「{item.Name}」（開始 {item.StartTime:F1}）が始まっています"));
+                                $"依存順序エラー: 「{prov.Name}」（終了 {provEnd:0.####}）より前に「{item.Name}」（開始 {item.StartTime:0.####}）が始まっています"));
                     }
                 }
                 else

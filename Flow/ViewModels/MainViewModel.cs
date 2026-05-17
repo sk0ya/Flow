@@ -24,6 +24,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private ItemViewModel? _selectedItem;
     [ObservableProperty] private string  _newItemName      = "";
     [ObservableProperty] private string  _timeUnit         = "日";
+    [ObservableProperty] private double  _cellDuration     = 1.0;
     [ObservableProperty] private double  _totalDuration    = 10.0;
     [ObservableProperty] private double  _projectDuration;
     [ObservableProperty] private bool    _hasErrors;
@@ -43,6 +44,16 @@ public partial class MainViewModel : ObservableObject
     public string WindowTitle => CurrentFilePath != null
         ? $"Flow — {System.IO.Path.GetFileNameWithoutExtension(CurrentFilePath)}"
         : "Flow";
+
+    public double CellDurationValue
+    {
+        get => ConvertCellDurationToDisplay(CellDuration);
+        set => CellDuration = ConvertDisplayToCellDuration(value);
+    }
+
+    public string CellDurationUnitLabel => GetCellDurationUnitLabel();
+
+    public string CellDurationSummary => $"1マス = {FormatNumber(CellDurationValue)} {CellDurationUnitLabel}";
 
     // ── Sidebar panel ─────────────────────────────────────────────────────
 
@@ -215,6 +226,7 @@ public partial class MainViewModel : ObservableObject
         Lanes.Add(new LaneViewModel("レーン 1"));
         ProjectName      = "新しいプロジェクト";
         TimeUnit         = "日";
+        CellDuration     = 1.0;
         TotalDuration    = 10.0;
         CurrentFilePath  = null;
         SelectedItem     = null;
@@ -249,6 +261,9 @@ public partial class MainViewModel : ObservableObject
         Items.Clear(); Lanes.Clear();
         ProjectName     = p.Name;
         TimeUnit        = p.TimeUnit;
+        CellDuration    = p.CellDuration > 0
+            ? p.CellDuration
+            : p.GridDivisions is > 0 ? 1.0 / p.GridDivisions.Value : 1.0;
         TotalDuration   = p.TotalDuration;
         CurrentFilePath = dlg.FileName;
         foreach (var l in p.Lanes) Lanes.Add(new LaneViewModel(l));
@@ -265,6 +280,7 @@ public partial class MainViewModel : ObservableObject
         {
             Name          = ProjectName,
             TimeUnit      = TimeUnit,
+            CellDuration  = CellDuration,
             TotalDuration = TotalDuration,
             Lanes         = Lanes.Select(l => l.ToModel()).ToList(),
             Items         = Items.Select(v => v.ToModel()).ToList(),
@@ -387,6 +403,80 @@ public partial class MainViewModel : ObservableObject
 
     // ── Partial property change handlers ─────────────────────────────────
 
-    partial void OnTimeUnitChanged(string value) => Analyze();
+    partial void OnTimeUnitChanged(string value)
+    {
+        CellDuration = NormalizeCellDuration(CellDuration);
+        OnPropertyChanged(nameof(CellDurationValue));
+        OnPropertyChanged(nameof(CellDurationUnitLabel));
+        OnPropertyChanged(nameof(CellDurationSummary));
+        Analyze();
+    }
+
+    partial void OnCellDurationChanged(double value)
+    {
+        double normalized = NormalizeCellDuration(value);
+        if (Math.Abs(normalized - value) > 1e-9)
+        {
+            CellDuration = normalized;
+            return;
+        }
+
+        OnPropertyChanged(nameof(CellDurationValue));
+        OnPropertyChanged(nameof(CellDurationUnitLabel));
+        OnPropertyChanged(nameof(CellDurationSummary));
+    }
+
     partial void OnTotalDurationChanged(double value) => Analyze();
+
+    private double ConvertCellDurationToDisplay(double value) =>
+        TryGetSmallerUnit(TimeUnit, out _, out var scale)
+            ? value * scale
+            : value;
+
+    private double ConvertDisplayToCellDuration(double value) =>
+        TryGetSmallerUnit(TimeUnit, out _, out var scale)
+            ? value / scale
+            : value;
+
+    private string GetCellDurationUnitLabel() =>
+        TryGetSmallerUnit(TimeUnit, out var smallerUnit, out _)
+            ? smallerUnit
+            : TimeUnit;
+
+    private static double NormalizeCellDuration(double value)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            return 1.0;
+
+        return Math.Clamp(value, 0.0001, 1.0);
+    }
+
+    private static bool TryGetSmallerUnit(string timeUnit, out string smallerUnit, out double scale)
+    {
+        switch (timeUnit)
+        {
+            case "分":
+                smallerUnit = "秒";
+                scale = 60;
+                return true;
+            case "時間":
+                smallerUnit = "分";
+                scale = 60;
+                return true;
+            case "日":
+                smallerUnit = "時間";
+                scale = 24;
+                return true;
+            case "週":
+                smallerUnit = "日";
+                scale = 7;
+                return true;
+            default:
+                smallerUnit = "";
+                scale = 0;
+                return false;
+        }
+    }
+
+    private static string FormatNumber(double value) => value.ToString("0.####");
 }

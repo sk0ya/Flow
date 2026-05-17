@@ -267,7 +267,7 @@
                     <Border Background="#E8F0FE" CornerRadius="8" Padding="10,4" Margin="0,0,8,0">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="プロジェクト期間  " FontSize="11" Foreground="#5F6368" VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding ProjectDuration, StringFormat=F1}"
+                            <TextBlock Text="{Binding ProjectDuration, StringFormat={}{0:0.####}}"
                                        FontSize="14" FontWeight="Bold" Foreground="#4285F4" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding TimeUnit}" FontSize="11" Foreground="#5F6368" VerticalAlignment="Center" Margin="2,0,0,0"/>
                         </StackPanel>
@@ -391,6 +391,19 @@
                             <TextBlock Grid.Column="1" Text="{Binding TimeUnit}" FontSize="11"
                                        Foreground="#9AA0A6" VerticalAlignment="Center" Margin="6,0,0,0"/>
                         </Grid>
+                        <TextBlock Text="1マスあたりの時間" FontSize="10" FontWeight="SemiBold"
+                                   Foreground="#5F6368" Margin="0,14,0,4"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Style="{StaticResource InputBox}" FontSize="12"
+                                     Text="{Binding CellDurationValue, StringFormat={}{0:0.####}, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding CellDurationUnitLabel}" FontSize="11"
+                                       Foreground="#9AA0A6" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                        </Grid>
+                        <TextBlock Text="{Binding CellDurationSummary}" FontSize="10" Foreground="#5F6368" Margin="0,6,0,0"/>
                     </StackPanel>
                 </Grid>
 
@@ -506,13 +519,13 @@
                                     <TextBlock Text="開始" FontSize="10" FontWeight="SemiBold"
                                                Foreground="#5F6368" Margin="0,0,0,4"/>
                                     <TextBox Style="{StaticResource InputBox}" FontSize="12"
-                                             Text="{Binding StartTime, StringFormat=F1, UpdateSourceTrigger=PropertyChanged}"/>
+                                             Text="{Binding StartTime, StringFormat={}{0:0.####}, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Text="所要時間" FontSize="10" FontWeight="SemiBold"
                                                Foreground="#5F6368" Margin="0,0,0,4"/>
                                     <TextBox Style="{StaticResource InputBox}" FontSize="12"
-                                             Text="{Binding Duration, StringFormat=F1, UpdateSourceTrigger=PropertyChanged}"/>
+                                             Text="{Binding Duration, StringFormat={}{0:0.####}, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
                             </Grid>
 
@@ -635,6 +648,7 @@
                                   SelectedItem="{Binding SelectedItem}"
                                   Lanes="{Binding Lanes}"
                                   TimeUnit="{Binding TimeUnit}"
+                                  CellDuration="{Binding CellDuration}"
                                   TotalDuration="{Binding TotalDuration}"
                                   />
         </Grid>

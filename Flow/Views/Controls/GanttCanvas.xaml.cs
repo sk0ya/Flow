@@ -37,6 +37,9 @@ public partial class GanttCanvas : UserControl
     public static readonly DependencyProperty TotalDurationProperty =
         DependencyProperty.Register(nameof(TotalDuration), typeof(double),
             typeof(GanttCanvas), new PropertyMetadata(10.0, (d, _) => ((GanttCanvas)d).Render()));
+    public static readonly DependencyProperty CellDurationProperty =
+        DependencyProperty.Register(nameof(CellDuration), typeof(double),
+            typeof(GanttCanvas), new PropertyMetadata(1.0, (d, _) => ((GanttCanvas)d).Render()));
     public static readonly DependencyProperty PixelsPerUnitProperty =
         DependencyProperty.Register(nameof(PixelsPerUnit), typeof(double),
             typeof(GanttCanvas), new PropertyMetadata(80.0, (d, _) => ((GanttCanvas)d).Render()));
@@ -53,6 +56,8 @@ public partial class GanttCanvas : UserControl
     { get => (string)GetValue(TimeUnitProperty); set => SetValue(TimeUnitProperty, value); }
     public double TotalDuration
     { get => (double)GetValue(TotalDurationProperty); set => SetValue(TotalDurationProperty, value); }
+    public double CellDuration
+    { get => (double)GetValue(CellDurationProperty); set => SetValue(CellDurationProperty, value); }
     public double PixelsPerUnit
     { get => (double)GetValue(PixelsPerUnitProperty); set => SetValue(PixelsPerUnitProperty, value); }
 
@@ -213,7 +218,7 @@ public partial class GanttCanvas : UserControl
         var lanes = Lanes?.ToList() ?? new List<LaneViewModel>();
         if (lanes.Count == 0) lanes.Add(new LaneViewModel("レーン 1"));
 
-        double ppu    = PixelsPerUnit;
+        double ppu    = GetPixelsPerTimeUnit();
         double total  = Math.Max(TotalDuration, 1);
         int    nLanes = lanes.Count;
         double totalW = total * ppu + 20;
@@ -238,9 +243,8 @@ public partial class GanttCanvas : UserControl
         }
 
         // 3. Minor grid lines
-        for (double t = 0.5; t < total; t += 0.5)
+        foreach (double t in EnumerateMinorTicks(total))
         {
-            if (Math.Abs(t % 1) < 0.01) continue;
             Add(VLine(t * ppu, 0, totalH, GridMinor, 0.5), 0, 0);
         }
 
@@ -312,12 +316,11 @@ public partial class GanttCanvas : UserControl
         AddTo(FrozenTimeHeaderCanvas, Rect(viewportW, TimeHeaderH, TimeHdrBg), 0, 0);
 
         double total  = Math.Max(TotalDuration, 1);
-        double ppu    = PixelsPerUnit;
+        double ppu    = GetPixelsPerTimeUnit();
         double offset = TimelineScrollViewer.HorizontalOffset;
 
-        for (double t = 0.5; t < total; t += 0.5)
+        foreach (double t in EnumerateMinorTicks(total))
         {
-            if (Math.Abs(t % 1) < 0.01) continue;
             double x = t * ppu - offset;
             if (x < -2 || x > viewportW + 2) continue;
             AddTo(FrozenTimeHeaderCanvas, VLine(x, 0, TimeHeaderH, GridMinor, 0.5), 0, 0);
@@ -751,7 +754,7 @@ public partial class GanttCanvas : UserControl
             }
         }
 
-        return Math.Max(0, best);
+        return NormalizeTimelineValue(Math.Max(0, best));
     }
 
     private double FindValidDuration(ItemViewModel item, double proposedDuration)
@@ -762,8 +765,9 @@ public partial class GanttCanvas : UserControl
             .OrderBy(i => i.StartTime)
             .FirstOrDefault();
 
+        double minDuration = GetGridStep();
         double maxDur = next != null ? next.StartTime - item.StartTime : double.MaxValue;
-        return Math.Clamp(proposedDuration, 0.5, Math.Max(0.5, maxDur));
+        return NormalizeTimelineValue(Math.Clamp(proposedDuration, minDuration, Math.Max(minDuration, maxDur)));
     }
 
     // ── Drag & Drop ───────────────────────────────────────────────────────
@@ -794,7 +798,7 @@ public partial class GanttCanvas : UserControl
         {
             _drag = DragMode.Move;
             _dragMouseOffsetX = _barRects.TryGetValue(item.Id, out var barRect)
-                ? (pos.X - barRect.Left) / PixelsPerUnit
+                ? (pos.X - barRect.Left) / GetPixelsPerTimeUnit()
                 : 0;
         }
 
@@ -810,14 +814,14 @@ public partial class GanttCanvas : UserControl
         if (_drag == DragMode.None) return;
         if (_dragItem == null) return;
 
-        double ppu = PixelsPerUnit;
+        double ppu = GetPixelsPerTimeUnit();
 
         if (_drag == DragMode.Move)
         {
             var lanes = Lanes?.ToList() ?? new List<LaneViewModel>();
             if (lanes.Count == 0) return;
 
-            double rawStart = Snap(pos.X / ppu - _dragMouseOffsetX);
+            double rawStart = SnapToGrid(pos.X / ppu - _dragMouseOffsetX);
             int rawLi = GetLaneIndex(pos.Y);
 
             if (rawLi >= lanes.Count && AddLaneFunc != null)
@@ -838,7 +842,7 @@ public partial class GanttCanvas : UserControl
         }
         else if (_drag == DragMode.Resize)
         {
-            double rawEnd = Snap(pos.X / ppu);
+            double rawEnd = SnapToGrid(pos.X / ppu);
             double rawDur = rawEnd - _dragItem.StartTime;
             _dragItem.Duration = FindValidDuration(_dragItem, rawDur);
         }
@@ -929,7 +933,7 @@ public partial class GanttCanvas : UserControl
         }
         else if (_dragItem != null && _drag == DragMode.Move)
         {
-            _dragItem.StartTime = Math.Max(0, _dragItem.StartTime);
+            _dragItem.StartTime = NormalizeTimelineValue(Math.Max(0, _dragItem.StartTime));
         }
 
         _dragToNewLane = false;
@@ -988,8 +992,30 @@ public partial class GanttCanvas : UserControl
 
     private int GetLaneIndex(double y) => (int)(y / LaneH);
 
-    private static double Snap(double value, double snap = 0.5) =>
-        Math.Round(value / snap) * snap;
+    private IEnumerable<double> EnumerateMinorTicks(double total)
+    {
+        double step = GetGridStep();
+        if (step >= 1.0 - 1e-9) yield break;
+
+        for (double t = step; t < total - 1e-9; t += step)
+        {
+            double normalized = NormalizeTimelineValue(t);
+            if (Math.Abs(normalized - Math.Round(normalized)) < 1e-9) continue;
+            yield return normalized;
+        }
+    }
+
+    private double GetGridStep() => Math.Clamp(CellDuration, 0.0001, 1.0);
+
+    private double GetPixelsPerTimeUnit() => PixelsPerUnit / GetGridStep();
+
+    private double SnapToGrid(double value) => NormalizeTimelineValue(Snap(value, GetGridStep()));
+
+    private static double Snap(double value, double snap) =>
+        snap <= 0 ? value : Math.Round(value / snap) * snap;
+
+    private static double NormalizeTimelineValue(double value) =>
+        Math.Round(value, 10, MidpointRounding.AwayFromZero);
 
     private Point GetFrozenLaneContentPoint(MouseEventArgs e)
     {
@@ -1055,7 +1081,7 @@ public partial class GanttCanvas : UserControl
         sp.Children.Add(new TextBlock { Text = item.Name, FontWeight = FontWeights.Bold, FontSize = 13 });
         sp.Children.Add(new TextBlock
         {
-            Text = $"開始: {item.StartTime:F1} {TimeUnit}  ／  所要: {item.Duration:F1} {TimeUnit}  ／  終了: {item.StartTime + item.Duration:F1} {TimeUnit}",
+            Text = $"開始: {FormatTimelineValue(item.StartTime)} {TimeUnit}  ／  所要: {FormatTimelineValue(item.Duration)} {TimeUnit}  ／  終了: {FormatTimelineValue(item.StartTime + item.Duration)} {TimeUnit}",
             FontSize = 10,
             Foreground = MutedText,
             Margin = new Thickness(0, 2, 0, 0),
@@ -1104,4 +1130,6 @@ public partial class GanttCanvas : UserControl
 
     private static Line HLine(double x1, double x2, double y, Brush stroke, double sw) =>
         new() { X1 = x1, Y1 = y, X2 = x2, Y2 = y, Stroke = stroke, StrokeThickness = sw };
+
+    private static string FormatTimelineValue(double value) => value.ToString("0.####");
 }
