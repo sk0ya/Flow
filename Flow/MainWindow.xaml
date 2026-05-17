@@ -246,7 +246,6 @@
             <Grid Margin="14,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
@@ -254,16 +253,10 @@
                     <TextBlock Text="⬡" FontSize="20" Foreground="#4285F4" VerticalAlignment="Center"/>
                     <TextBlock Text=" Flow" FontSize="16" FontWeight="Bold" Foreground="#202124" VerticalAlignment="Center"/>
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="新規"           Style="{StaticResource FlatBtn}" Command="{Binding NewProjectCommand}"/>
-                    <Button Content="開く"           Style="{StaticResource FlatBtn}" Command="{Binding OpenProjectCommand}"/>
-                    <Button Content="保存"           Style="{StaticResource FlatBtn}" Command="{Binding SaveProjectCommand}"/>
-                    <Button Content="名前を付けて保存" Style="{StaticResource FlatBtn}" Command="{Binding SaveProjectAsCommand}"/>
-                </StackPanel>
-                <TextBlock Grid.Column="2" Text="{Binding ProjectName}"
+                <TextBlock Grid.Column="1" Text="{Binding ProjectName}"
                            FontSize="13" FontWeight="SemiBold" Foreground="#5F6368"
                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <Border Background="#E8F0FE" CornerRadius="8" Padding="10,4" Margin="0,0,8,0">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="プロジェクト期間  " FontSize="11" Foreground="#5F6368" VerticalAlignment="Center"/>
@@ -355,9 +348,13 @@
                         <StackPanel>
                             <TextBlock Text="最近使ったファイル" FontSize="10" FontWeight="SemiBold"
                                        Foreground="#9AA0A6" Margin="0,0,0,6"/>
-                            <ItemsControl ItemsSource="{Binding RecentProjects}">
-                                <ItemsControl.Style>
-                                    <Style TargetType="ItemsControl">
+                            <ListBox ItemsSource="{Binding RecentProjects}"
+                                     SelectedItem="{Binding SelectedRecentProject, Mode=TwoWay}"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Padding="0">
+                                <ListBox.Style>
+                                    <Style TargetType="ListBox">
                                         <Setter Property="Visibility" Value="Collapsed"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding HasRecentProjects}" Value="True">
@@ -365,16 +362,42 @@
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
-                                </ItemsControl.Style>
-                                <ItemsControl.ItemTemplate>
+                                </ListBox.Style>
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem">
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                        <Setter Property="Margin" Value="0,0,0,6"/>
+                                        <Setter Property="Padding" Value="0"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="ListBoxItem">
+                                                    <ContentPresenter Margin="{TemplateBinding Margin}"
+                                                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                                <ListBox.ItemTemplate>
                                     <DataTemplate DataType="{x:Type vm:RecentProjectEntry}">
-                                        <Button Style="{StaticResource FlatBtn}"
-                                                Command="{Binding DataContext.OpenRecentProjectCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                        <Button Command="{Binding DataContext.OpenRecentProjectCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                 CommandParameter="{Binding}"
                                                 HorizontalAlignment="Stretch"
                                                 HorizontalContentAlignment="Left"
-                                                Margin="0,0,0,6"
                                                 Padding="10,8">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource FlatBtn}">
+                                                    <Setter Property="Margin" Value="0"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsSelected}" Value="True">
+                                                            <Setter Property="Background" Value="#E8F0FE"/>
+                                                            <Setter Property="BorderBrush" Value="#4285F4"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
                                             <StackPanel>
                                                 <TextBlock Text="{Binding DisplayName}"
                                                            FontSize="12"
@@ -386,8 +409,8 @@
                                             </StackPanel>
                                         </Button>
                                     </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
                             <TextBlock Text="（なし）" FontSize="10" Foreground="#C5C5C5" FontStyle="Italic">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">

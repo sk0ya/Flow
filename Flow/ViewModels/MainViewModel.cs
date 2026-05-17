@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Flow.Models;
@@ -23,9 +25,12 @@ public partial class MainViewModel : ObservableObject
     private readonly StorageService    _stor            = new();
     private readonly AppStateService   _appStateService = new();
     private readonly AppState          _appState;
+    private readonly DispatcherTimer   _autoSaveTimer;
+    private bool _suspendAutoSave;
 
     [ObservableProperty] private string         _projectName = "新しいプロジェクト";
     [ObservableProperty] private string?        _currentFilePath;
+    [ObservableProperty] private RecentProjectEntry? _selectedRecentProject;
     [ObservableProperty] private ItemViewModel? _selectedItem;
     [ObservableProperty] private string         _newItemName   = "";
     [ObservableProperty] private string         _timeUnit      = "日";
@@ -65,7 +70,7 @@ public partial class MainViewModel : ObservableObject
 
     // ── Sidebar panel ─────────────────────────────────────────────────────
 
-    private SidebarPanel _activeSidebarPanel = SidebarPanel.TaskEditor;
+    private SidebarPanel _activeSidebarPanel = SidebarPanel.ProjectList;
 
     public bool IsProjectListActive
     {
@@ -88,6 +93,8 @@ public partial class MainViewModel : ObservableObject
     private void SetActivePanel(SidebarPanel panel)
     {
         _activeSidebarPanel = panel;
+        if (panel == SidebarPanel.ProjectList)
+            SyncSelectedRecentProject();
         OnPropertyChanged(nameof(IsProjectListActive));
         OnPropertyChanged(nameof(IsProjectSettingsActive));
         OnPropertyChanged(nameof(IsTaskEditorActive));
@@ -96,9 +103,15 @@ public partial class MainViewModel : ObservableObject
     public MainViewModel(string? startupProjectPath = null)
     {
         _appState = _appStateService.Load();
+        _autoSaveTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(600)
+        };
+        _autoSaveTimer.Tick += (_, _) => FlushAutoSave();
 
+        Lanes.CollectionChanged += OnLanesCollectionChanged;
+        Items.CollectionChanged += OnItemsCollectionChanged;
         Lanes.Add(new LaneViewModel("レーン 1"));
-        Items.CollectionChanged += (_, _) => Analyze();
 
         if (PruneInvalidProjectState())
             PersistAppState();
@@ -230,7 +243,6 @@ public partial class MainViewModel : ObservableObject
     private void UndoDelete()
     {
         if (_deletedItem == null) return;
-        Subscribe(_deletedItem);
         Items.Add(_deletedItem);
         SelectedItem  = _deletedItem;
         _deletedItem  = null;
@@ -248,16 +260,20 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void NewProject()
     {
-        Items.Clear();
-        Lanes.Clear();
-        Lanes.Add(new LaneViewModel("レーン 1"));
-        ProjectName     = "新しいプロジェクト";
-        TimeUnit        = "日";
-        CellDuration    = 1.0;
-        TotalDuration   = 10.0;
-        CurrentFilePath = null;
-        SelectedItem    = null;
-        CanUndoDelete   = false;
+        RunWithoutAutoSave(() =>
+        {
+            Items.Clear();
+            Lanes.Clear();
+            Lanes.Add(new LaneViewModel("レーン 1"));
+            ProjectName     = "新しいプロジェクト";
+            TimeUnit        = "日";
+            CellDuration    = 1.0;
+            TotalDuration   = 10.0;
+            CurrentFilePath = null;
+            SelectedItem    = null;
+            CanUndoDelete   = false;
+            SetActivePanel(SidebarPanel.ProjectSettings);
+        });
     }
 
     [RelayCommand]
@@ -280,10 +296,14 @@ public partial class MainViewModel : ObservableObject
         if (dlg.ShowDialog() != true) return;
 
         var originalProjectName = ProjectName;
-        ProjectName = Path.GetFileNameWithoutExtension(dlg.FileName);
-
-        if (!TrySaveProject(dlg.FileName))
-            ProjectName = originalProjectName;
+        bool saved = false;
+        RunWithoutAutoSave(() =>
+        {
+            ProjectName = Path.GetFileNameWithoutExtension(dlg.FileName);
+            saved = TrySaveProject(dlg.FileName);
+            if (!saved)
+                ProjectName = originalProjectName;
+        });
     }
 
     [RelayCommand]
@@ -344,13 +364,18 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private bool TrySaveProject(string filePath)
+    private bool TrySaveProject(string filePath, bool showErrorMessage = true)
     {
+        _autoSaveTimer.Stop();
+
         var normalizedPath = NormalizeProjectPath(filePath);
         if (normalizedPath == null)
         {
-            MessageBox.Show("保存先パスが不正です。", "Flow",
-                MessageBoxButton.OK, MessageBoxImage.Error);
+            if (showErrorMessage)
+            {
+                MessageBox.Show("保存先パスが不正です。", "Flow",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
             return false;
         }
 
@@ -372,43 +397,50 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"プロジェクトを保存できませんでした。\n{ex.Message}", "Flow",
-                MessageBoxButton.OK, MessageBoxImage.Error);
+            if (showErrorMessage)
+            {
+                MessageBox.Show($"プロジェクトを保存できませんでした。\n{ex.Message}", "Flow",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
             return false;
         }
     }
 
     private void ApplyProject(SequenceProject project, string filePath)
     {
-        Items.Clear();
-        Lanes.Clear();
-
-        ProjectName = string.IsNullOrWhiteSpace(project.Name)
-            ? Path.GetFileNameWithoutExtension(filePath)
-            : project.Name;
-        TimeUnit = project.TimeUnit;
-        CellDuration = project.CellDuration > 0
-            ? project.CellDuration
-            : project.GridDivisions is > 0 ? 1.0 / project.GridDivisions.Value : 1.0;
-        TotalDuration = project.TotalDuration;
-        CurrentFilePath = filePath;
-
-        foreach (var lane in project.Lanes)
-            Lanes.Add(new LaneViewModel(lane));
-
-        if (Lanes.Count == 0)
-            Lanes.Add(new LaneViewModel("レーン 1"));
-
-        foreach (var model in project.Items)
+        RunWithoutAutoSave(() =>
         {
-            var vm = new ItemViewModel(model);
-            Subscribe(vm);
-            Items.Add(vm);
-        }
+            Items.Clear();
+            Lanes.Clear();
 
-        SelectedItem  = null;
-        CanUndoDelete = false;
-        Analyze();
+            ProjectName = string.IsNullOrWhiteSpace(project.Name)
+                ? Path.GetFileNameWithoutExtension(filePath)
+                : project.Name;
+            TimeUnit = project.TimeUnit;
+            CellDuration = project.CellDuration > 0
+                ? project.CellDuration
+                : project.GridDivisions is > 0 ? 1.0 / project.GridDivisions.Value : 1.0;
+            TotalDuration = project.TotalDuration;
+            CurrentFilePath = filePath;
+
+            foreach (var lane in project.Lanes)
+                Lanes.Add(new LaneViewModel(lane));
+
+            if (Lanes.Count == 0)
+                Lanes.Add(new LaneViewModel("レーン 1"));
+
+            foreach (var model in project.Items)
+            {
+                var vm = new ItemViewModel(model);
+                Subscribe(vm);
+                Items.Add(vm);
+            }
+
+            SelectedItem  = null;
+            CanUndoDelete = false;
+            SetActivePanel(SidebarPanel.ProjectList);
+            Analyze();
+        });
     }
 
     private void TryRestoreStartupProject(string? startupProjectPath)
@@ -425,6 +457,12 @@ public partial class MainViewModel : ObservableObject
 
     private void RememberProject(string filePath)
     {
+        bool isLastProjectSame = string.Equals(_appState.LastProjectPath, filePath, StringComparison.OrdinalIgnoreCase);
+        bool isTopRecentSame = _appState.RecentProjectPaths.Count > 0 &&
+                               string.Equals(_appState.RecentProjectPaths[0], filePath, StringComparison.OrdinalIgnoreCase);
+        if (isLastProjectSame && isTopRecentSame)
+            return;
+
         _appState.LastProjectPath = filePath;
         _appState.RecentProjectPaths.RemoveAll(path =>
             string.Equals(path, filePath, StringComparison.OrdinalIgnoreCase));
@@ -507,6 +545,7 @@ public partial class MainViewModel : ObservableObject
             RecentProjects.Add(new RecentProjectEntry(filePath));
 
         OnPropertyChanged(nameof(HasRecentProjects));
+        SyncSelectedRecentProject();
     }
 
     private void PersistAppState()
@@ -538,10 +577,39 @@ public partial class MainViewModel : ObservableObject
 
     private bool _resolving;
 
+    private void OnItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        Analyze();
+        RequestAutoSave();
+    }
+
+    private void OnLanesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action is NotifyCollectionChangedAction.Add or NotifyCollectionChangedAction.Replace)
+        {
+            if (e.NewItems != null)
+            {
+                foreach (LaneViewModel lane in e.NewItems)
+                    Subscribe(lane);
+            }
+        }
+
+        RequestAutoSave();
+    }
+
+    private void Subscribe(LaneViewModel vm)
+    {
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(LaneViewModel.Name))
+                RequestAutoSave();
+        };
+    }
+
     private void Subscribe(ItemViewModel vm)
     {
-        vm.PreConditions.CollectionChanged  += (_, _) => Analyze();
-        vm.PostConditions.CollectionChanged += (_, _) => Analyze();
+        vm.PreConditions.CollectionChanged  += (_, _) => { Analyze(); RequestAutoSave(); };
+        vm.PostConditions.CollectionChanged += (_, _) => { Analyze(); RequestAutoSave(); };
         vm.PropertyChanged += (_, e) =>
         {
             if (_resolving) return;
@@ -557,6 +625,15 @@ public partial class MainViewModel : ObservableObject
                                or nameof(ItemViewModel.Duration)
                                or nameof(ItemViewModel.LaneId))
                 Analyze();
+
+            if (e.PropertyName is nameof(ItemViewModel.Name)
+                               or nameof(ItemViewModel.Description)
+                               or nameof(ItemViewModel.StartTime)
+                               or nameof(ItemViewModel.Duration)
+                               or nameof(ItemViewModel.LaneId))
+            {
+                RequestAutoSave();
+            }
         };
     }
 
@@ -699,6 +776,7 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(CellDurationUnitLabel));
         OnPropertyChanged(nameof(CellDurationSummary));
         Analyze();
+        RequestAutoSave();
     }
 
     partial void OnCellDurationChanged(double value)
@@ -713,11 +791,65 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(CellDurationValue));
         OnPropertyChanged(nameof(CellDurationUnitLabel));
         OnPropertyChanged(nameof(CellDurationSummary));
+        RequestAutoSave();
     }
 
-    partial void OnCurrentFilePathChanged(string? value) => OnPropertyChanged(nameof(WindowTitle));
+    partial void OnProjectNameChanged(string value) => RequestAutoSave();
 
-    partial void OnTotalDurationChanged(double value) => Analyze();
+    partial void OnCurrentFilePathChanged(string? value)
+    {
+        OnPropertyChanged(nameof(WindowTitle));
+        SyncSelectedRecentProject();
+    }
+
+    partial void OnTotalDurationChanged(double value)
+    {
+        Analyze();
+        RequestAutoSave();
+    }
+
+    private void RequestAutoSave()
+    {
+        if (_suspendAutoSave || string.IsNullOrWhiteSpace(CurrentFilePath))
+            return;
+
+        _autoSaveTimer.Stop();
+        _autoSaveTimer.Start();
+    }
+
+    private void FlushAutoSave()
+    {
+        _autoSaveTimer.Stop();
+
+        if (_suspendAutoSave || string.IsNullOrWhiteSpace(CurrentFilePath))
+            return;
+
+        TrySaveProject(CurrentFilePath, showErrorMessage: false);
+    }
+
+    private void RunWithoutAutoSave(Action action)
+    {
+        bool wasSuspended = _suspendAutoSave;
+        _suspendAutoSave = true;
+        _autoSaveTimer.Stop();
+        try
+        {
+            action();
+        }
+        finally
+        {
+            _suspendAutoSave = wasSuspended;
+        }
+    }
+
+    private void SyncSelectedRecentProject()
+    {
+        var normalizedCurrentPath = NormalizeProjectPath(CurrentFilePath);
+        SelectedRecentProject = normalizedCurrentPath == null
+            ? null
+            : RecentProjects.FirstOrDefault(project =>
+                string.Equals(project.FilePath, normalizedCurrentPath, StringComparison.OrdinalIgnoreCase));
+    }
 
     private double ConvertCellDurationToDisplay(double value) =>
         TryGetSmallerUnit(TimeUnit, out _, out var scale)
