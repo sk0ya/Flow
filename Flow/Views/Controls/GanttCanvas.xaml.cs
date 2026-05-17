@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Media3D;
 using System.Windows.Shapes;
 using Flow.Services;
 using Flow.ViewModels;
@@ -108,9 +109,12 @@ public partial class GanttCanvas : UserControl
     // Task rename state
     private ItemViewModel? _renamingItem;
     private TextBox?       _taskRenameBox;
+    private bool           _discardRenamingItemOnCancel;
 
     // Callbacks set in code-behind
     public Func<Guid>?       AddLaneFunc          { get; set; }
+    public Func<Guid, double, ItemViewModel?>? AddItemAtFunc { get; set; }
+    public Action<ItemViewModel>? DiscardItemFunc { get; set; }
     public Action<int, int>? ReorderLanesCallback { get; set; }
 
     // ── Cached rects ──────────────────────────────────────────────────────
@@ -121,6 +125,7 @@ public partial class GanttCanvas : UserControl
     {
         InitializeComponent();
 
+        PreviewMouseLeftButtonDown            += OnPreviewGanttMouseDown;
         RootCanvas.PreviewMouseLeftButtonDown += OnMouseDown;
         RootCanvas.MouseMove                  += OnMouseMove;
         RootCanvas.MouseLeftButtonUp          += OnMouseUp;
@@ -588,6 +593,51 @@ public partial class GanttCanvas : UserControl
         e.Handled = true;
     }
 
+    private void OnPreviewGanttMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!IsRenaming || IsClickInsideActiveEditor(e.OriginalSource as DependencyObject)) return;
+
+        // The first click outside an inline editor only confirms the edit.
+        CommitActiveRename();
+        e.Handled = true;
+    }
+
+    private void CommitActiveRename()
+    {
+        if (_renamingLane != null)
+            CommitLaneRename();
+        else if (_renamingItem != null)
+            CommitTaskRename();
+    }
+
+    private bool IsClickInsideActiveEditor(DependencyObject? source) =>
+        IsDescendantOf(source, _renameBox) || IsDescendantOf(source, _taskRenameBox);
+
+    private static bool IsDescendantOf(DependencyObject? source, DependencyObject? ancestor)
+    {
+        while (source != null)
+        {
+            if (ReferenceEquals(source, ancestor)) return true;
+            source = GetParent(source);
+        }
+
+        return false;
+    }
+
+    private static DependencyObject? GetParent(DependencyObject source)
+    {
+        if (source is FrameworkContentElement fce)
+            return fce.Parent;
+
+        if (source is ContentElement ce)
+            return ContentOperations.GetParent(ce);
+
+        if (source is Visual || source is Visual3D)
+            return VisualTreeHelper.GetParent(source);
+
+        return null;
+    }
+
     // ── Lane rename ───────────────────────────────────────────────────────
 
     private void StartLaneRename(LaneViewModel lane, int laneIndex)
@@ -620,16 +670,25 @@ public partial class GanttCanvas : UserControl
 
     private void CommitLaneRename(bool cancel = false)
     {
-        if (_renamingLane == null || _renameBox == null) return;
+        var lane = _renamingLane;
+        var renameBox = _renameBox;
+        if (lane == null || renameBox == null) return;
+
+        _renameBox = null;
+        _renamingLane = null;
+
+        renameBox.KeyDown   -= OnRenameKeyDown;
+        renameBox.LostFocus -= OnRenameLostFocus;
+
         if (!cancel)
         {
-            var name = _renameBox.Text.Trim();
-            if (!string.IsNullOrEmpty(name)) _renamingLane.Name = name;
+            var name = renameBox.Text.Trim();
+            if (!string.IsNullOrEmpty(name)) lane.Name = name;
         }
 
-        FrozenLaneCanvas.Children.Remove(_renameBox);
-        _renameBox    = null;
-        _renamingLane = null;
+        if (renameBox.Parent is Panel panel)
+            panel.Children.Remove(renameBox);
+
         Render();
     }
 
@@ -649,11 +708,12 @@ public partial class GanttCanvas : UserControl
 
     private void OnRenameLostFocus(object sender, RoutedEventArgs e) => CommitLaneRename();
 
-    private void StartTaskRename(ItemViewModel item)
+    private void StartTaskRename(ItemViewModel item, bool discardOnCancel = false)
     {
         if (!_barRects.TryGetValue(item.Id, out var rect)) return;
 
         _renamingItem = item;
+        _discardRenamingItemOnCancel = discardOnCancel;
 
         _taskRenameBox = new TextBox
         {
@@ -680,16 +740,35 @@ public partial class GanttCanvas : UserControl
 
     private void CommitTaskRename(bool cancel = false)
     {
-        if (_renamingItem == null || _taskRenameBox == null) return;
-        if (!cancel)
-        {
-            var name = _taskRenameBox.Text.Trim();
-            if (!string.IsNullOrEmpty(name)) _renamingItem.Name = name;
-        }
+        var item = _renamingItem;
+        var taskRenameBox = _taskRenameBox;
+        if (item == null || taskRenameBox == null) return;
 
-        RootCanvas.Children.Remove(_taskRenameBox);
         _taskRenameBox = null;
         _renamingItem = null;
+        bool discardOnCancel = _discardRenamingItemOnCancel;
+        _discardRenamingItemOnCancel = false;
+
+        taskRenameBox.KeyDown   -= OnTaskRenameKeyDown;
+        taskRenameBox.LostFocus -= OnTaskRenameLostFocus;
+
+        if (!cancel)
+        {
+            var name = taskRenameBox.Text.Trim();
+            if (!string.IsNullOrEmpty(name)) item.Name = name;
+        }
+
+        if (taskRenameBox.Parent is Panel panel)
+            panel.Children.Remove(taskRenameBox);
+
+        if (cancel && discardOnCancel)
+        {
+            DiscardItemFunc?.Invoke(item);
+            if (SelectedItem?.Id == item.Id) SelectedItem = null;
+            Render();
+            return;
+        }
+
         Render();
     }
 
@@ -810,7 +889,13 @@ public partial class GanttCanvas : UserControl
         double bestDist = double.MaxValue;
         foreach (var g in validGaps)
         {
-            double clamped = Math.Clamp(proposedStart, g.s, g.e - dur);
+            double minStart = NormalizeTimelineValue(g.s);
+            double maxStart = g.e == double.MaxValue
+                ? double.MaxValue
+                : NormalizeTimelineValue(g.e - dur);
+            if (maxStart < minStart) maxStart = minStart;
+
+            double clamped = Math.Clamp(proposedStart, minStart, maxStart);
             double dist = Math.Abs(proposedStart - clamped);
             if (dist < bestDist)
             {
@@ -845,7 +930,7 @@ public partial class GanttCanvas : UserControl
         var item = HitTestItem(pos);
         if (item == null)
         {
-            SelectedItem = null;
+            TryAddTaskAt(pos, e);
             return;
         }
 
@@ -1052,6 +1137,28 @@ public partial class GanttCanvas : UserControl
 
         int laneIdx = GetLaneIndex(contentPos.Y);
         FrozenLaneCanvas.Cursor = laneIdx >= 0 && laneIdx < lanes.Count ? Cursors.SizeNS : Cursors.Arrow;
+    }
+
+    private void TryAddTaskAt(Point pos, MouseButtonEventArgs e)
+    {
+        var lanes = Lanes?.ToList() ?? new List<LaneViewModel>();
+        int laneIdx = GetLaneIndex(pos.Y);
+
+        if (laneIdx < 0 || laneIdx >= lanes.Count || AddItemAtFunc == null)
+        {
+            SelectedItem = null;
+            return;
+        }
+
+        double startTime = SnapToGrid(Math.Max(0, pos.X / GetPixelsPerTimeUnit()));
+        var item = AddItemAtFunc(lanes[laneIdx].Id, startTime);
+        if (item != null)
+        {
+            SelectedItem = item;
+            StartTaskRename(item, discardOnCancel: true);
+        }
+
+        e.Handled = true;
     }
 
     // ── Hit testing ───────────────────────────────────────────────────────

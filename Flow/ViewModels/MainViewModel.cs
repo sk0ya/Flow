@@ -172,26 +172,37 @@ public partial class MainViewModel : ObservableObject
         var name = NewItemName.Trim();
         if (string.IsNullOrEmpty(name)) return;
 
-        var laneId = Lanes.FirstOrDefault()?.Id ?? Guid.Empty;
+        var laneId = SelectedItem?.LaneId ?? Lanes.FirstOrDefault()?.Id ?? Guid.Empty;
+        if (laneId == Guid.Empty) return;
 
-        // Place after the last item in the target lane (never overlap)
-        double startTime = Items
-            .Where(i => i.LaneId == laneId)
-            .Select(i => i.StartTime + i.Duration)
-            .DefaultIfEmpty(0)
-            .Max();
+        double startTime = SelectedItem != null
+            ? SelectedItem.StartTime + SelectedItem.Duration
+            : Items.Where(i => i.LaneId == laneId)
+                   .Select(i => i.StartTime + i.Duration)
+                   .DefaultIfEmpty(0)
+                   .Max();
 
-        var vm = new ItemViewModel
-        {
-            Name      = name,
-            LaneId    = laneId,
-            StartTime = startTime,
-            Duration  = 1.0,
-        };
-        Subscribe(vm);
-        Items.Add(vm);
-        SelectedItem = vm;
+        CreateItem(name, laneId, startTime);
         NewItemName  = "";
+    }
+
+    public ItemViewModel? AddNewItemAt(Guid laneId, double proposedStartTime)
+    {
+        var targetLaneId = Lanes.Any(l => l.Id == laneId)
+            ? laneId
+            : Lanes.FirstOrDefault()?.Id ?? Guid.Empty;
+        if (targetLaneId == Guid.Empty) return null;
+
+        var item = CreateItem("新しいタスク", targetLaneId, proposedStartTime);
+        SetActivePanel(SidebarPanel.TaskEditor);
+        return item;
+    }
+
+    public void DiscardNewItem(ItemViewModel? item)
+    {
+        if (item == null) return;
+        if (!Items.Remove(item)) return;
+        if (SelectedItem?.Id == item.Id) SelectedItem = null;
     }
 
     [RelayCommand]
@@ -548,6 +559,46 @@ public partial class MainViewModel : ObservableObject
                 Analyze();
         };
     }
+
+    private ItemViewModel CreateItem(string name, Guid laneId, double proposedStartTime)
+    {
+        double defaultDuration = GetDefaultItemDuration();
+        var vm = new ItemViewModel
+        {
+            Name      = name,
+            LaneId    = laneId,
+            StartTime = FindAvailableStartAtOrAfter(laneId, proposedStartTime, defaultDuration),
+            Duration  = defaultDuration,
+        };
+
+        Subscribe(vm);
+        Items.Add(vm);
+        SelectedItem = vm;
+        return vm;
+    }
+
+    private double FindAvailableStartAtOrAfter(Guid laneId, double proposedStartTime, double duration)
+    {
+        double start = Math.Max(0, proposedStartTime);
+        var others = Items
+            .Where(i => i.LaneId == laneId)
+            .OrderBy(i => i.StartTime)
+            .ToList();
+
+        foreach (var other in others)
+        {
+            double otherEnd = other.StartTime + other.Duration;
+            if (start + duration <= other.StartTime + 1e-9)
+                break;
+
+            if (start < otherEnd - 1e-9)
+                start = otherEnd;
+        }
+
+        return Math.Round(start, 10, MidpointRounding.AwayFromZero);
+    }
+
+    private double GetDefaultItemDuration() => NormalizeCellDuration(CellDuration);
 
     // Find the nearest valid StartTime in targetLaneId that fits vm without overlap.
     // Called when lane changes via the editor dropdown.

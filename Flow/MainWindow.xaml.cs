@@ -24,6 +24,8 @@ public partial class MainWindow : Window
         var vm = new MainViewModel(startupProjectPath);
         DataContext = vm;
         GanttView.AddLaneFunc          = vm.AddNewLane;
+        GanttView.AddItemAtFunc        = vm.AddNewItemAt;
+        GanttView.DiscardItemFunc      = vm.DiscardNewItem;
         GanttView.ReorderLanesCallback = vm.ReorderLane;
     }
 
