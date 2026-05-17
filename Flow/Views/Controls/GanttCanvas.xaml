@@ -1,0 +1,12 @@
+<UserControl x:Class="Flow.Views.Controls.GanttCanvas"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Auto"
+                  Background="#F8F9FA">
+        <Canvas x:Name="RootCanvas"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                ClipToBounds="False"/>
+    </ScrollViewer>
+</UserControl>

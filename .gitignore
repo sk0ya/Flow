@@ -1,0 +1,18 @@
+# Build outputs
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.idea/
+
+# NuGet
+*.nupkg
+**/packages/
+project.lock.json
+project.assets.json
+**/project.nuget.cache
+
+# OS
+.DS_Store
+Thumbs.db
