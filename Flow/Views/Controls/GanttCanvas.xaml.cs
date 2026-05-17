@@ -105,12 +105,17 @@ public partial class GanttCanvas : UserControl
     private TextBox?       _renameBox;
     private HwndSource?    _hwndSource;
 
+    // Task rename state
+    private ItemViewModel? _renamingItem;
+    private TextBox?       _taskRenameBox;
+
     // Callbacks set in code-behind
     public Func<Guid>?       AddLaneFunc          { get; set; }
     public Action<int, int>? ReorderLanesCallback { get; set; }
 
     // ── Cached rects ──────────────────────────────────────────────────────
     private readonly Dictionary<Guid, Rect> _barRects = new();
+    private bool IsRenaming => _renamingLane != null || _renamingItem != null;
 
     public GanttCanvas()
     {
@@ -209,7 +214,7 @@ public partial class GanttCanvas : UserControl
 
     public void Render()
     {
-        if (_renamingLane != null) return;
+        if (IsRenaming) return;
 
         RootCanvas.Children.Clear();
         _barRects.Clear();
@@ -613,7 +618,7 @@ public partial class GanttCanvas : UserControl
         _renameBox.SelectAll();
     }
 
-    private void CommitRename(bool cancel = false)
+    private void CommitLaneRename(bool cancel = false)
     {
         if (_renamingLane == null || _renameBox == null) return;
         if (!cancel)
@@ -632,17 +637,77 @@ public partial class GanttCanvas : UserControl
     {
         if (e.Key == Key.Return)
         {
-            CommitRename();
+            CommitLaneRename();
             e.Handled = true;
         }
         else if (e.Key == Key.Escape)
         {
-            CommitRename(cancel: true);
+            CommitLaneRename(cancel: true);
             e.Handled = true;
         }
     }
 
-    private void OnRenameLostFocus(object sender, RoutedEventArgs e) => CommitRename();
+    private void OnRenameLostFocus(object sender, RoutedEventArgs e) => CommitLaneRename();
+
+    private void StartTaskRename(ItemViewModel item)
+    {
+        if (!_barRects.TryGetValue(item.Id, out var rect)) return;
+
+        _renamingItem = item;
+
+        _taskRenameBox = new TextBox
+        {
+            Text = item.Name,
+            Width = Math.Clamp(rect.Width + 24, 120, 280),
+            Height = 24,
+            FontSize = 11,
+            Padding = new Thickness(5, 2, 5, 2),
+            BorderBrush = DropLine,
+            BorderThickness = new Thickness(1.5),
+            Background = Brushes.White,
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        _taskRenameBox.KeyDown += OnTaskRenameKeyDown;
+        _taskRenameBox.LostFocus += OnTaskRenameLostFocus;
+
+        Canvas.SetLeft(_taskRenameBox, Math.Max(0, rect.Left + 2));
+        Canvas.SetTop(_taskRenameBox, rect.Top + (rect.Height - _taskRenameBox.Height) / 2.0);
+        Panel.SetZIndex(_taskRenameBox, int.MaxValue);
+        RootCanvas.Children.Add(_taskRenameBox);
+        _taskRenameBox.Focus();
+        _taskRenameBox.SelectAll();
+    }
+
+    private void CommitTaskRename(bool cancel = false)
+    {
+        if (_renamingItem == null || _taskRenameBox == null) return;
+        if (!cancel)
+        {
+            var name = _taskRenameBox.Text.Trim();
+            if (!string.IsNullOrEmpty(name)) _renamingItem.Name = name;
+        }
+
+        RootCanvas.Children.Remove(_taskRenameBox);
+        _taskRenameBox = null;
+        _renamingItem = null;
+        Render();
+    }
+
+    private void OnTaskRenameKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Return)
+        {
+            CommitTaskRename();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            CommitTaskRename(cancel: true);
+            e.Handled = true;
+        }
+    }
+
+    private void OnTaskRenameLostFocus(object sender, RoutedEventArgs e) => CommitTaskRename();
 
     // ── Arrows ────────────────────────────────────────────────────────────
 
@@ -774,7 +839,7 @@ public partial class GanttCanvas : UserControl
 
     private void OnMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (_renamingLane != null) return;
+        if (IsRenaming) return;
 
         var pos = e.GetPosition(RootCanvas);
         var item = HitTestItem(pos);
@@ -784,13 +849,23 @@ public partial class GanttCanvas : UserControl
             return;
         }
 
-        SelectedItem        = item;
+        SelectedItem = item;
+
+        if (_barRects.TryGetValue(item.Id, out var r) &&
+            pos.X < r.Right - ResizeW &&
+            e.ClickCount == 2)
+        {
+            StartTaskRename(item);
+            e.Handled = true;
+            return;
+        }
+
         _dragItem           = item;
         _dragOriginStart    = item.StartTime;
         _dragOriginDuration = item.Duration;
         _dragLaneIdx        = GetLaneIndex(pos.Y);
 
-        if (_barRects.TryGetValue(item.Id, out var r) && pos.X >= r.Right - ResizeW)
+        if (_barRects.TryGetValue(item.Id, out r) && pos.X >= r.Right - ResizeW)
         {
             _drag = DragMode.Resize;
         }
@@ -858,7 +933,7 @@ public partial class GanttCanvas : UserControl
 
     private void OnFrozenLaneMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (_renamingLane != null) return;
+        if (IsRenaming) return;
 
         var pos = GetFrozenLaneContentPoint(e);
         var lanes = Lanes?.ToList() ?? new List<LaneViewModel>();
