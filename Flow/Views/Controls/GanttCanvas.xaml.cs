@@ -67,6 +67,8 @@ public partial class GanttCanvas : UserControl
     private const double LaneH        = 36;
     private const double BarH         = 28;
     private const double TimeHeaderH  = 30;
+    private const double TimeTickLabelOffset = 4;
+    private const double TimeTickLabelWidth  = 36;
     private const double ResizeW      = 8;
     private const double MinBarW      = 4;
     private const double AddLaneZoneH = 32;
@@ -348,9 +350,9 @@ public partial class GanttCanvas : UserControl
                 Text = t.ToString(),
                 FontSize = 11,
                 Foreground = MutedText,
-                Width = 40,
-                TextAlignment = TextAlignment.Center,
-            }, x - 20, (TimeHeaderH - 15) / 2);
+                Width = TimeTickLabelWidth,
+                TextAlignment = TextAlignment.Left,
+            }, x + TimeTickLabelOffset, (TimeHeaderH - 15) / 2);
         }
 
         AddTo(FrozenTimeHeaderCanvas, new TextBlock
