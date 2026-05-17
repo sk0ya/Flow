@@ -54,10 +54,6 @@ public partial class MainViewModel : ObservableObject
 
     public bool HasRecentProjects => RecentProjects.Count > 0;
 
-    public string WindowTitle => CurrentFilePath != null
-        ? $"Flow — {Path.GetFileNameWithoutExtension(CurrentFilePath)}"
-        : "Flow";
-
     public double CellDurationValue
     {
         get => ConvertCellDurationToDisplay(CellDuration);
@@ -798,7 +794,6 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnCurrentFilePathChanged(string? value)
     {
-        OnPropertyChanged(nameof(WindowTitle));
         SyncSelectedRecentProject();
     }
 

@@ -29,6 +29,22 @@ public partial class MainWindow : Window
         GanttView.ReorderLanesCallback = vm.ReorderLane;
     }
 
+    private void OnMinimizeWindow(object sender, RoutedEventArgs e) =>
+        SystemCommands.MinimizeWindow(this);
+
+    private void OnToggleMaximizeWindow(object sender, RoutedEventArgs e)
+    {
+        if (WindowState == WindowState.Maximized)
+        {
+            SystemCommands.RestoreWindow(this);
+            return;
+        }
+
+        SystemCommands.MaximizeWindow(this);
+    }
+
+    private void OnCloseWindow(object sender, RoutedEventArgs e) => Close();
+
     // ── Autocomplete popup ────────────────────────────────────────────────
 
     private void OnPreCondInputChanged(object sender, TextChangedEventArgs e)
