@@ -767,6 +767,47 @@
                         <TextBlock Text="{Binding CellDurationError}" FontSize="10"
                                    Foreground="{DynamicResource AppDangerBrush}" Margin="0,4,0,0"
                                    Visibility="{Binding HasCellDurationError, Converter={StaticResource BoolVis}}"/>
+
+                        <!-- Categories -->
+                        <TextBlock Text="カテゴリ" FontSize="10" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,14,0,6"/>
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Style="{StaticResource InputBox}" FontSize="11"
+                                     Text="{Binding NewCategoryName, UpdateSourceTrigger=PropertyChanged}">
+                                <TextBox.InputBindings>
+                                    <KeyBinding Key="Return" Command="{Binding AddCategoryCommand}"/>
+                                </TextBox.InputBindings>
+                            </TextBox>
+                            <Button Grid.Column="1" Content="+ 追加" Margin="4,0,0,0"
+                                    Style="{StaticResource FlatBtn}" FontSize="11" Padding="7,4"
+                                    Command="{Binding AddCategoryCommand}"/>
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding Categories}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:CategoryViewModel}">
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border Width="14" Height="14" CornerRadius="7"
+                                                Background="{Binding Brush}"
+                                                VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <TextBox Grid.Column="1" Style="{StaticResource InputBox}" FontSize="11"
+                                                 Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <Button Grid.Column="2" Content="✕" Margin="4,0,0,0"
+                                                Style="{StaticResource FlatBtn}" FontSize="10" Padding="6,4"
+                                                Command="{Binding DataContext.DeleteCategoryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
                 </Grid>
 
@@ -989,6 +1030,39 @@
                                       FontSize="12"
                                       VerticalContentAlignment="Center"/>
 
+                            <!-- Category -->
+                            <TextBlock Text="カテゴリ" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,10,0,4"/>
+                            <ComboBox ItemsSource="{Binding DataContext.CategoriesForPicker, RelativeSource={RelativeSource AncestorType=Window}}"
+                                      SelectedValue="{Binding CategoryId}"
+                                      SelectedValuePath="Id"
+                                      Style="{StaticResource InputComboBox}"
+                                      FontSize="12"
+                                      VerticalContentAlignment="Center">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:CategoryViewModel}">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Border Width="12" Height="12" CornerRadius="6" Margin="0,0,7,0">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="{Binding Brush}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsNone}" Value="True">
+                                                                <Setter Property="Background" Value="Transparent"/>
+                                                                <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+                                                                <Setter Property="BorderThickness" Value="1"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                            </Border>
+                                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+
                             <!-- Description -->
                             <TextBlock Text="説明（任意）" FontSize="10" FontWeight="SemiBold"
                                        Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,10,0,4"/>
@@ -1097,6 +1171,7 @@
                                   Edges="{Binding DependencyEdges}"
                                   SelectedItem="{Binding SelectedItem}"
                                   Lanes="{Binding Lanes}"
+                                  Categories="{Binding Categories}"
                                   TimeUnit="{Binding TimeUnit}"
                                   CellDuration="{Binding CellDuration}"
                                   TotalDuration="{Binding TotalDuration}"

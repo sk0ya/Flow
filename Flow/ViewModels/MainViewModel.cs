@@ -60,6 +60,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private ThemeOption?   _selectedThemeOption;
     [ObservableProperty] private AccentColorOption? _selectedAccentColorOption;
 
+    [ObservableProperty] private string _newCategoryName = "";
+
     // Undo delete
     [ObservableProperty] private bool   _canUndoDelete;
     [ObservableProperty] private string _undoMessage = "";
@@ -67,6 +69,7 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty] private string? _cellDurationError;
 
+    public ObservableCollection<CategoryViewModel>  Categories      { get; } = new();
     public ObservableCollection<LaneViewModel>      Lanes           { get; } = new();
     public ObservableCollection<ItemViewModel>      Items           { get; } = new();
     public ObservableCollection<ValidationError>    Errors          { get; } = new();
@@ -74,6 +77,9 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<RecentProjectEntry> RecentProjects  { get; } = new();
     public ObservableCollection<ThemeOption> ThemeOptions { get; } = new();
     public ObservableCollection<AccentColorOption> AccentColorOptions { get; } = new();
+
+    public IEnumerable<CategoryViewModel> CategoriesForPicker =>
+        Enumerable.Repeat(CategoryViewModel.None, 1).Concat(Categories);
 
     public static readonly string[] TimeUnitOptions = { "秒", "分", "時間", "日", "週", "スプリント" };
 
@@ -155,6 +161,7 @@ public partial class MainViewModel : ObservableObject
 
         InitializeAppearance();
 
+        Categories.CollectionChanged += OnCategoriesCollectionChanged;
         Lanes.CollectionChanged += OnLanesCollectionChanged;
         Items.CollectionChanged += OnItemsCollectionChanged;
         Lanes.Add(new LaneViewModel("レーン 1"));
@@ -205,6 +212,43 @@ public partial class MainViewModel : ObservableObject
              .GroupBy(s => s.Value, StringComparer.OrdinalIgnoreCase).Select(g => g.First())
              .Where(s => string.IsNullOrEmpty(filter) || s.Value.Contains(filter, StringComparison.OrdinalIgnoreCase))
              .OrderBy(s => s.Value).Take(8).ToList();
+
+    // ── Category color palette ────────────────────────────────────────────
+
+    private static readonly string[] CategoryColorPalette =
+    {
+        "#60A5FA", "#34D399", "#FBBF24", "#A78BFA",
+        "#F472B6", "#38BDF8", "#FB923C", "#F87171",
+    };
+
+    private string NextCategoryColor() =>
+        CategoryColorPalette[Categories.Count % CategoryColorPalette.Length];
+
+    // ── Category commands ─────────────────────────────────────────────────
+
+    [RelayCommand]
+    private void AddCategory()
+    {
+        var name = NewCategoryName.Trim();
+        if (string.IsNullOrEmpty(name)) return;
+        var cat = new CategoryViewModel(Guid.NewGuid(), name, NextCategoryColor());
+        Subscribe(cat);
+        Categories.Add(cat);
+        NewCategoryName = "";
+        OnPropertyChanged(nameof(CategoriesForPicker));
+    }
+
+    [RelayCommand]
+    private void DeleteCategory(CategoryViewModel? cat)
+    {
+        if (cat == null) return;
+        foreach (var item in Items.Where(i => i.CategoryId == cat.Id))
+            item.CategoryId = Guid.Empty;
+        Categories.Remove(cat);
+        OnPropertyChanged(nameof(CategoriesForPicker));
+        Analyze();
+        RequestAutoSave();
+    }
 
     // ── Lane commands ─────────────────────────────────────────────────────
 
@@ -334,6 +378,7 @@ public partial class MainViewModel : ObservableObject
         {
             Items.Clear();
             Lanes.Clear();
+            Categories.Clear();
             Lanes.Add(new LaneViewModel("レーン 1"));
             ProjectName     = "新しいプロジェクト";
             TimeUnit        = "日";
@@ -342,6 +387,7 @@ public partial class MainViewModel : ObservableObject
             CurrentFilePath = null;
             SelectedItem    = null;
             CanUndoDelete   = false;
+            OnPropertyChanged(nameof(CategoriesForPicker));
             SetActivePanel(SidebarPanel.ProjectSettings);
         });
     }
@@ -457,6 +503,7 @@ public partial class MainViewModel : ObservableObject
                 TimeUnit      = TimeUnit,
                 CellDuration  = CellDuration,
                 TotalDuration = TotalDuration,
+                Categories    = Categories.Select(c => c.ToModel()).ToList(),
                 Lanes         = Lanes.Select(l => l.ToModel()).ToList(),
                 Items         = Items.Select(v => v.ToModel()).ToList(),
             }, normalizedPath);
@@ -482,6 +529,7 @@ public partial class MainViewModel : ObservableObject
         {
             Items.Clear();
             Lanes.Clear();
+            Categories.Clear();
 
             ProjectName = string.IsNullOrWhiteSpace(project.Name)
                 ? Path.GetFileNameWithoutExtension(filePath)
@@ -493,6 +541,15 @@ public partial class MainViewModel : ObservableObject
             SyncCellDurationText();
             TotalDuration = project.TotalDuration;
             CurrentFilePath = filePath;
+
+            foreach (var cat in project.Categories)
+            {
+                var vm = new CategoryViewModel(cat);
+                Subscribe(vm);
+                Categories.Add(vm);
+            }
+
+            OnPropertyChanged(nameof(CategoriesForPicker));
 
             foreach (var lane in project.Lanes)
                 Lanes.Add(new LaneViewModel(lane));
@@ -648,6 +705,13 @@ public partial class MainViewModel : ObservableObject
 
     private bool _resolving;
 
+    private void OnCategoriesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(CategoriesForPicker));
+        Analyze();
+        RequestAutoSave();
+    }
+
     private void OnItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         Analyze();
@@ -666,6 +730,15 @@ public partial class MainViewModel : ObservableObject
         }
 
         RequestAutoSave();
+    }
+
+    private void Subscribe(CategoryViewModel vm)
+    {
+        vm.PropertyChanged += (_, _) =>
+        {
+            Analyze();
+            RequestAutoSave();
+        };
     }
 
     private void Subscribe(LaneViewModel vm)
@@ -694,14 +767,16 @@ public partial class MainViewModel : ObservableObject
             if (e.PropertyName is nameof(ItemViewModel.Name)
                                or nameof(ItemViewModel.StartTime)
                                or nameof(ItemViewModel.Duration)
-                               or nameof(ItemViewModel.LaneId))
+                               or nameof(ItemViewModel.LaneId)
+                               or nameof(ItemViewModel.CategoryId))
                 Analyze();
 
             if (e.PropertyName is nameof(ItemViewModel.Name)
                                or nameof(ItemViewModel.Description)
                                or nameof(ItemViewModel.StartTime)
                                or nameof(ItemViewModel.Duration)
-                               or nameof(ItemViewModel.LaneId))
+                               or nameof(ItemViewModel.LaneId)
+                               or nameof(ItemViewModel.CategoryId))
             {
                 RequestAutoSave();
             }

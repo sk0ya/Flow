@@ -45,6 +45,9 @@ public partial class GanttCanvas : UserControl
     public static readonly DependencyProperty PixelsPerUnitProperty =
         DependencyProperty.Register(nameof(PixelsPerUnit), typeof(double),
             typeof(GanttCanvas), new PropertyMetadata(80.0, (d, _) => ((GanttCanvas)d).Render()));
+    public static readonly DependencyProperty CategoriesProperty =
+        DependencyProperty.Register(nameof(Categories), typeof(IEnumerable<CategoryViewModel>),
+            typeof(GanttCanvas), new PropertyMetadata(null, OnAnyChanged));
 
     public IEnumerable<ItemViewModel>? ItemsSource
     { get => (IEnumerable<ItemViewModel>?)GetValue(ItemsSourceProperty); set => SetValue(ItemsSourceProperty, value); }
@@ -62,6 +65,8 @@ public partial class GanttCanvas : UserControl
     { get => (double)GetValue(CellDurationProperty); set => SetValue(CellDurationProperty, value); }
     public double PixelsPerUnit
     { get => (double)GetValue(PixelsPerUnitProperty); set => SetValue(PixelsPerUnitProperty, value); }
+    public IEnumerable<CategoryViewModel>? Categories
+    { get => (IEnumerable<CategoryViewModel>?)GetValue(CategoriesProperty); set => SetValue(CategoriesProperty, value); }
 
     // ── Layout constants ──────────────────────────────────────────────────
     private const double LaneHeaderW  = 150;
@@ -482,9 +487,15 @@ public partial class GanttCanvas : UserControl
         bool selected = SelectedItem?.Id == item.Id;
         var palette = ThemeService.CurrentPalette;
 
+        var category = item.CategoryId != Guid.Empty
+            ? Categories?.FirstOrDefault(c => c.Id == item.CategoryId)
+            : null;
         Brush fill = item.HasErrors
             ? palette.DangerSoft
-            : palette.Accent;
+            : (category != null ? category.Brush : palette.Accent);
+        Brush textFill = item.HasErrors || category == null
+            ? palette.AccentText
+            : GetCategoryTextBrush(category.ColorValue);
 
         var bar = new Border
         {
@@ -508,7 +519,7 @@ public partial class GanttCanvas : UserControl
             {
                 Text = item.Name,
                 FontSize = 11,
-                Foreground = palette.AccentText,
+                Foreground = textFill,
                 FontWeight = FontWeights.SemiBold,
                 Margin = new Thickness(7, 0, ResizeW + 4, 0),
                 VerticalAlignment = VerticalAlignment.Center,
@@ -952,6 +963,14 @@ public partial class GanttCanvas : UserControl
     {
         var alpha = ThemeService.CurrentPalette.IsDark ? (byte)90 : (byte)60;
         return new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255));
+    }
+
+    private static Brush GetCategoryTextBrush(Color color)
+    {
+        double luminance = (0.299 * color.R + 0.587 * color.G + 0.114 * color.B) / 255.0;
+        return luminance > 0.62
+            ? new SolidColorBrush(Color.FromRgb(32, 33, 36))
+            : Brushes.White;
     }
 
     // ── Successor push (resize cascade) ──────────────────────────────────

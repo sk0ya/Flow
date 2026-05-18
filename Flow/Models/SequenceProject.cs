@@ -11,6 +11,7 @@ public class SequenceProject
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? GridDivisions { get; set; }
     public double TotalDuration { get; set; } = 10.0;
+    public List<ProjectCategory> Categories { get; set; } = new();
     public List<Lane> Lanes { get; set; } = new() { new Lane { Name = "レーン 1" } };
     public List<SequenceItem> Items { get; set; } = new();
 }

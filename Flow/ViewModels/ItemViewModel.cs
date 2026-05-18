@@ -11,6 +11,7 @@ public partial class ItemViewModel : ObservableObject
     [ObservableProperty] private Guid   _id;
     [ObservableProperty] private string _name = "";
     [ObservableProperty] private string _description = "";
+    [ObservableProperty] private Guid   _categoryId = Guid.Empty;
     [ObservableProperty] private double _startTime;
     [ObservableProperty] private double _duration = 1.0;
     [ObservableProperty] private Guid   _laneId;
@@ -29,12 +30,13 @@ public partial class ItemViewModel : ObservableObject
 
     public ItemViewModel(SequenceItem model)
     {
-        _id        = model.Id;
-        _name      = model.Name;
+        _id          = model.Id;
+        _name        = model.Name;
         _description = model.Description;
-        _startTime = model.StartTime;
-        _duration  = model.Duration;
-        _laneId    = model.LaneId;
+        _categoryId  = model.CategoryId;
+        _startTime   = model.StartTime;
+        _duration    = model.Duration;
+        _laneId      = model.LaneId;
         foreach (var c in model.PreConditions)  PreConditions.Add(new ConditionEntry(c));
         foreach (var c in model.PostConditions) PostConditions.Add(new ConditionEntry(c));
     }
@@ -62,6 +64,7 @@ public partial class ItemViewModel : ObservableObject
     public SequenceItem ToModel() => new()
     {
         Id = Id, Name = Name, Description = Description,
+        CategoryId = CategoryId,
         StartTime = StartTime, Duration = Duration, LaneId = LaneId,
         PreConditions  = new([..PreConditions.Select(e => e.Value)]),
         PostConditions = new([..PostConditions.Select(e => e.Value)]),
