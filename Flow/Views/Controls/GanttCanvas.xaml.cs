@@ -932,16 +932,48 @@ public partial class GanttCanvas : UserControl
                 : NormalizeTimelineValue(g.e - dur);
             if (maxStart < minStart) maxStart = minStart;
 
-            double clamped = Math.Clamp(proposedStart, minStart, maxStart);
-            double dist = Math.Abs(proposedStart - clamped);
+            double snapped = FindBestSnap(proposedStart, minStart, maxStart);
+            double dist = Math.Abs(proposedStart - snapped);
             if (dist < bestDist)
             {
                 bestDist = dist;
-                best = clamped;
+                best = snapped;
             }
         }
 
         return NormalizeTimelineValue(Math.Max(0, best));
+    }
+
+    // Returns the snap candidate (grid position or task boundary) nearest to proposedStart,
+    // clamped to [minStart, maxStart].
+    private double FindBestSnap(double proposedStart, double minStart, double maxStart)
+    {
+        double best = Math.Clamp(proposedStart, minStart, maxStart);
+        double bestDist = double.MaxValue;
+
+        void TryCandidate(double candidate)
+        {
+            candidate = NormalizeTimelineValue(Math.Clamp(candidate, minStart, maxStart));
+            double d = Math.Abs(proposedStart - candidate);
+            if (d < bestDist) { bestDist = d; best = candidate; }
+        }
+
+        // Task boundary: flush against preceding task (gap start) or following task (gap end - dur)
+        TryCandidate(minStart);
+        if (maxStart < double.MaxValue / 2)
+            TryCandidate(maxStart);
+
+        // Grid snap: nearest grid position and its two neighbours
+        double gridStep = GetGridStepInSeconds();
+        if (gridStep > 0)
+        {
+            double nearest = NormalizeTimelineValue(Math.Round(proposedStart / gridStep) * gridStep);
+            TryCandidate(nearest);
+            TryCandidate(NormalizeTimelineValue(nearest - gridStep));
+            TryCandidate(NormalizeTimelineValue(nearest + gridStep));
+        }
+
+        return best;
     }
 
     private double FindValidDuration(ItemViewModel item, double proposedDuration)
@@ -1018,14 +1050,14 @@ public partial class GanttCanvas : UserControl
             var lanes = Lanes?.ToList() ?? new List<LaneViewModel>();
             if (lanes.Count == 0) return;
 
-            double rawStart = SnapToSeconds(pos.X / pps - _dragMouseOffsetX);
+            double rawStart = NormalizeTimelineValue(pos.X / pps - _dragMouseOffsetX);
             int rawLi = GetLaneIndex(pos.Y);
 
             if (rawLi >= lanes.Count && AddLaneFunc != null)
             {
                 _dragToNewLane = true;
                 _dragLaneIdx = lanes.Count;
-                _dragItem.StartTime = Math.Max(0, rawStart);
+                _dragItem.StartTime = Math.Max(0, SnapToSeconds(rawStart));
             }
             else
             {
