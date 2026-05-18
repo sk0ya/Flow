@@ -75,20 +75,6 @@ public partial class GanttCanvas : UserControl
     private const int    WmMouseHWheel = 0x020E;
     private const int    WheelDelta    = 120;
 
-    // ── Colors ────────────────────────────────────────────────────────────
-    private static readonly Brush BgWhite    = Brushes.White;
-    private static readonly Brush LaneHdrBg  = new SolidColorBrush(Color.FromRgb(248, 249, 250));
-    private static readonly Brush TimeHdrBg  = new SolidColorBrush(Color.FromRgb(242, 244, 248));
-    private static readonly Brush EvenRow    = new SolidColorBrush(Color.FromArgb(15, 66, 133, 244));
-    private static readonly Brush GridMinor  = new SolidColorBrush(Color.FromRgb(235, 237, 242));
-    private static readonly Brush GridMajor  = new SolidColorBrush(Color.FromRgb(210, 215, 225));
-    private static readonly Brush Divider    = new SolidColorBrush(Color.FromRgb(200, 204, 212));
-    private static readonly Brush NormalBar  = new SolidColorBrush(Color.FromRgb(66, 133, 244));
-    private static readonly Brush ErrorBarFg = new SolidColorBrush(Color.FromRgb(229, 115, 115));
-    private static readonly Brush DarkText   = new SolidColorBrush(Color.FromRgb(32, 33, 36));
-    private static readonly Brush MutedText  = new SolidColorBrush(Color.FromRgb(95, 99, 104));
-    private static readonly Brush DropLine   = new SolidColorBrush(Color.FromRgb(66, 133, 244));
-
     // ── Drag state ────────────────────────────────────────────────────────
     private ItemViewModel? _dragItem;
     private enum DragMode { None, Move, Resize, LaneReorder }
@@ -126,6 +112,7 @@ public partial class GanttCanvas : UserControl
     public GanttCanvas()
     {
         InitializeComponent();
+        ThemeService.ThemeChanged += OnThemeChanged;
 
         PreviewMouseLeftButtonDown            += OnPreviewGanttMouseDown;
         RootCanvas.PreviewMouseLeftButtonDown += OnMouseDown;
@@ -168,7 +155,13 @@ public partial class GanttCanvas : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e) => AttachWindowHook();
 
-    private void OnUnloaded(object sender, RoutedEventArgs e) => DetachWindowHook();
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        DetachWindowHook();
+        ThemeService.ThemeChanged -= OnThemeChanged;
+    }
+
+    private void OnThemeChanged(object? sender, EventArgs e) => Render();
 
     private void AttachWindowHook()
     {
@@ -223,6 +216,14 @@ public partial class GanttCanvas : UserControl
     {
         if (IsRenaming) return;
 
+        var palette = ThemeService.CurrentPalette;
+        Brush surface = palette.Surface;
+        Brush rowAccent = palette.AccentFaint;
+        Brush gridMinor = palette.BorderSoft;
+        Brush gridMajor = palette.Border;
+        Brush divider = palette.BorderStrong;
+        Brush dropLine = palette.Accent;
+
         RootCanvas.Children.Clear();
         _barRects.Clear();
 
@@ -236,41 +237,41 @@ public partial class GanttCanvas : UserControl
         double totalW = total * ppu + 20;
         double totalH = nLanes * LaneH + AddLaneZoneH + 20;
 
-        // 1. White background
-        Add(Rect(totalW, totalH, BgWhite), 0, 0);
+        // 1. Background
+        Add(Rect(totalW, totalH, surface), 0, 0);
 
         // 2. Alternating lane backgrounds and reorder source highlight
         for (int i = 0; i < nLanes; i++)
         {
             double rowY = i * LaneH;
             if (i % 2 == 0)
-                Add(Rect(totalW, LaneH, EvenRow), 0, rowY);
+                Add(Rect(totalW, LaneH, rowAccent), 0, rowY);
 
             if (_drag == DragMode.LaneReorder && _reorderSourceLane == i)
                 Add(new Rectangle
                 {
                     Width = totalW, Height = LaneH,
-                    Fill = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255)),
+                    Fill = CreateOverlayBrush(),
                 }, 0, rowY);
         }
 
         // 3. Minor grid lines
         foreach (double t in EnumerateMinorTicks(total))
         {
-            Add(VLine(t * ppu, 0, totalH, GridMinor, 0.5), 0, 0);
+            Add(VLine(t * ppu, 0, totalH, gridMinor, 0.5), 0, 0);
         }
 
         // 4. Major grid lines
-        for (int t = 0; t <= (int)total; t++)
-            Add(VLine(t * ppu, 0, totalH, t == 0 ? Divider : GridMajor, t == 0 ? 1 : 0.8), 0, 0);
+        foreach (double t in EnumerateMajorTicks(total))
+            Add(VLine(t * ppu, 0, totalH, t == 0 ? divider : gridMajor, t == 0 ? 1 : 0.8), 0, 0);
 
         // 5. Horizontal lane separators
         for (int i = 0; i <= nLanes; i++)
-            Add(HLine(0, totalW, i * LaneH, GridMajor, i == 0 ? 1 : 0.6), 0, 0);
+            Add(HLine(0, totalW, i * LaneH, gridMajor, i == 0 ? 1 : 0.6), 0, 0);
 
         // 6. Lane reorder drop indicator
         if (_drag == DragMode.LaneReorder && _reorderDropLane >= 0)
-            Add(new Rectangle { Width = totalW, Height = 2, Fill = DropLine }, 0, _reorderDropLane * LaneH - 1);
+            Add(new Rectangle { Width = totalW, Height = 2, Fill = dropLine }, 0, _reorderDropLane * LaneH - 1);
 
         // 7. Compute bar rects
         var laneIndexMap = lanes.Select((lane, idx) => (lane.Id, idx)).ToDictionary(x => x.Id, x => x.idx);
@@ -317,6 +318,8 @@ public partial class GanttCanvas : UserControl
 
     private void RenderFrozenTimeHeader()
     {
+        var palette = ThemeService.CurrentPalette;
+
         FrozenTimeHeaderCanvas.Children.Clear();
 
         double viewportW = GetHeaderViewportWidth();
@@ -325,7 +328,7 @@ public partial class GanttCanvas : UserControl
         FrozenTimeHeaderCanvas.Width  = viewportW;
         FrozenTimeHeaderCanvas.Height = TimeHeaderH;
 
-        AddTo(FrozenTimeHeaderCanvas, Rect(viewportW, TimeHeaderH, TimeHdrBg), 0, 0);
+        AddTo(FrozenTimeHeaderCanvas, Rect(viewportW, TimeHeaderH, palette.SurfaceMuted), 0, 0);
 
         double total  = Math.Max(TotalDuration, 1);
         double ppu    = GetPixelsPerTimeUnit();
@@ -335,21 +338,21 @@ public partial class GanttCanvas : UserControl
         {
             double x = t * ppu - offset;
             if (x < -2 || x > viewportW + 2) continue;
-            AddTo(FrozenTimeHeaderCanvas, VLine(x, 0, TimeHeaderH, GridMinor, 0.5), 0, 0);
+            AddTo(FrozenTimeHeaderCanvas, VLine(x, 0, TimeHeaderH, palette.BorderSoft, 0.5), 0, 0);
         }
 
-        for (int t = 0; t <= (int)total; t++)
+        foreach (double t in EnumerateMajorTicks(total))
         {
             double x = t * ppu - offset;
             if (x < -40 || x > viewportW + 40) continue;
 
             AddTo(FrozenTimeHeaderCanvas,
-                VLine(x, 0, TimeHeaderH, t == 0 ? Divider : GridMajor, t == 0 ? 1 : 0.8), 0, 0);
+                VLine(x, 0, TimeHeaderH, t == 0 ? palette.BorderStrong : palette.Border, t == 0 ? 1 : 0.8), 0, 0);
             AddTo(FrozenTimeHeaderCanvas, new TextBlock
             {
-                Text = t.ToString(),
+                Text = FormatTickLabel(t),
                 FontSize = 11,
-                Foreground = MutedText,
+                Foreground = palette.TextSecondary,
                 Width = TimeTickLabelWidth,
                 TextAlignment = TextAlignment.Left,
             }, x + TimeTickLabelOffset, (TimeHeaderH - 15) / 2);
@@ -359,14 +362,16 @@ public partial class GanttCanvas : UserControl
         {
             Text = $"（{TimeUnit}）",
             FontSize = 10,
-            Foreground = MutedText,
+            Foreground = palette.TextSecondary,
         }, 4, (TimeHeaderH - 14) / 2);
 
-        AddTo(FrozenTimeHeaderCanvas, HLine(0, viewportW, TimeHeaderH - 0.5, Divider, 1), 0, 0);
+        AddTo(FrozenTimeHeaderCanvas, HLine(0, viewportW, TimeHeaderH - 0.5, palette.BorderStrong, 1), 0, 0);
     }
 
     private void RenderFrozenLaneHeader()
     {
+        var palette = ThemeService.CurrentPalette;
+
         FrozenLaneCanvas.Children.Clear();
 
         double viewportH = GetLaneViewportHeight();
@@ -375,7 +380,7 @@ public partial class GanttCanvas : UserControl
         FrozenLaneCanvas.Width  = LaneHeaderW;
         FrozenLaneCanvas.Height = viewportH;
 
-        AddTo(FrozenLaneCanvas, Rect(LaneHeaderW, viewportH, LaneHdrBg), 0, 0);
+        AddTo(FrozenLaneCanvas, Rect(LaneHeaderW, viewportH, palette.SurfaceAlt), 0, 0);
 
         var lanes = Lanes?.ToList() ?? new List<LaneViewModel>();
         if (lanes.Count == 0) lanes.Add(new LaneViewModel("レーン 1"));
@@ -386,7 +391,7 @@ public partial class GanttCanvas : UserControl
         {
             double y = i * LaneH - offset;
             if (y < -2 || y > viewportH + 2) continue;
-            AddTo(FrozenLaneCanvas, HLine(0, LaneHeaderW, y, GridMajor, i == 0 ? 1 : 0.6), 0, 0);
+            AddTo(FrozenLaneCanvas, HLine(0, LaneHeaderW, y, palette.Border, i == 0 ? 1 : 0.6), 0, 0);
         }
 
         for (int i = 0; i < lanes.Count; i++)
@@ -402,7 +407,7 @@ public partial class GanttCanvas : UserControl
                 Text = "⠿",
                 FontSize = 10,
                 Cursor = Cursors.SizeNS,
-                Foreground = new SolidColorBrush(Color.FromArgb(100, 95, 99, 104)),
+                Foreground = CreateMutedOverlayBrush(),
             }, 5, rowY + (LaneH - 14) / 2);
 
             AddTo(FrozenLaneCanvas, new TextBlock
@@ -410,7 +415,7 @@ public partial class GanttCanvas : UserControl
                 Text = lanes[i].Name,
                 FontSize = 12,
                 FontWeight = isActiveLane ? FontWeights.SemiBold : FontWeights.Normal,
-                Foreground = DarkText,
+                Foreground = palette.TextPrimary,
                 Opacity = isReorderSource ? 0.3 : 1.0,
                 Width = LaneHeaderW - 20,
                 TextAlignment = TextAlignment.Right,
@@ -423,7 +428,7 @@ public partial class GanttCanvas : UserControl
                 {
                     Width = LaneHeaderW,
                     Height = LaneH,
-                    Fill = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255)),
+                    Fill = CreateOverlayBrush(),
                 }, 0, rowY);
 
                 AddTo(FrozenLaneCanvas, new TextBlock
@@ -431,7 +436,7 @@ public partial class GanttCanvas : UserControl
                     Text = "⠿",
                     FontSize = 10,
                     Cursor = Cursors.SizeNS,
-                    Foreground = new SolidColorBrush(Color.FromArgb(100, 95, 99, 104)),
+                    Foreground = CreateMutedOverlayBrush(),
                 }, 5, rowY + (LaneH - 14) / 2);
 
                 AddTo(FrozenLaneCanvas, new TextBlock
@@ -439,7 +444,7 @@ public partial class GanttCanvas : UserControl
                     Text = lanes[i].Name,
                     FontSize = 12,
                     FontWeight = isActiveLane ? FontWeights.SemiBold : FontWeights.Normal,
-                    Foreground = DarkText,
+                    Foreground = palette.TextPrimary,
                     Opacity = 0.3,
                     Width = LaneHeaderW - 20,
                     TextAlignment = TextAlignment.Right,
@@ -451,12 +456,12 @@ public partial class GanttCanvas : UserControl
         if (_drag == DragMode.LaneReorder && _reorderDropLane >= 0)
         {
             double y = _reorderDropLane * LaneH - offset;
-            AddTo(FrozenLaneCanvas, new Ellipse { Width = 10, Height = 10, Fill = DropLine }, 1, y - 5);
-            AddTo(FrozenLaneCanvas, new Rectangle { Width = LaneHeaderW - 11, Height = 2, Fill = DropLine }, 11, y - 1);
+            AddTo(FrozenLaneCanvas, new Ellipse { Width = 10, Height = 10, Fill = palette.Accent }, 1, y - 5);
+            AddTo(FrozenLaneCanvas, new Rectangle { Width = LaneHeaderW - 11, Height = 2, Fill = palette.Accent }, 11, y - 1);
         }
 
         DrawFrozenAddLaneZone(lanes.Count, offset);
-        AddTo(FrozenLaneCanvas, VLine(LaneHeaderW - 0.5, 0, viewportH, Divider, 1), 0, 0);
+        AddTo(FrozenLaneCanvas, VLine(LaneHeaderW - 0.5, 0, viewportH, palette.BorderStrong, 1), 0, 0);
     }
 
     // ── Bar rendering ─────────────────────────────────────────────────────
@@ -465,10 +470,11 @@ public partial class GanttCanvas : UserControl
     {
         if (!_barRects.TryGetValue(item.Id, out var r)) return;
         bool selected = SelectedItem?.Id == item.Id;
+        var palette = ThemeService.CurrentPalette;
 
         Brush fill = item.HasErrors
-            ? new SolidColorBrush(Color.FromArgb(200, 229, 115, 115))
-            : NormalBar;
+            ? palette.DangerSoft
+            : palette.Accent;
 
         var bar = new Border
         {
@@ -478,8 +484,8 @@ public partial class GanttCanvas : UserControl
             CornerRadius = new CornerRadius(5),
             Opacity = ghost ? 0.22 : 1.0,
             BorderBrush = selected
-                ? new SolidColorBrush(Color.FromRgb(30, 30, 30))
-                : (item.HasErrors ? ErrorBarFg : Brushes.Transparent),
+                ? palette.TextPrimary
+                : (item.HasErrors ? palette.Danger : Brushes.Transparent),
             BorderThickness = selected ? new Thickness(2) : new Thickness(item.HasErrors ? 1.5 : 0),
             Cursor = Cursors.SizeAll,
             ToolTip = BuildTooltip(item),
@@ -492,7 +498,7 @@ public partial class GanttCanvas : UserControl
             {
                 Text = item.Name,
                 FontSize = 11,
-                Foreground = Brushes.White,
+                Foreground = palette.AccentText,
                 FontWeight = FontWeights.SemiBold,
                 Margin = new Thickness(7, 0, ResizeW + 4, 0),
                 VerticalAlignment = VerticalAlignment.Center,
@@ -508,7 +514,7 @@ public partial class GanttCanvas : UserControl
             {
                 Width = ResizeW,
                 Height = r.Height,
-                Background = new SolidColorBrush(Color.FromArgb(60, 255, 255, 255)),
+                Background = CreateResizeHandleBrush(),
                 CornerRadius = new CornerRadius(0, 5, 5, 0),
                 Cursor = Cursors.SizeWE,
             }, r.Right - ResizeW, r.Top);
@@ -520,14 +526,15 @@ public partial class GanttCanvas : UserControl
         double ghostX = item.StartTime * ppu;
         double ghostW = Math.Max(item.Duration * ppu, MinBarW);
         double ghostY = _dragLaneIdx * LaneH + (LaneH - BarH) / 2.0;
+        var palette = ThemeService.CurrentPalette;
 
         Add(new Border
         {
             Width = ghostW,
             Height = BarH,
-            Background = new SolidColorBrush(Color.FromArgb(100, 66, 133, 244)),
+            Background = palette.AccentGhost,
             CornerRadius = new CornerRadius(5),
-            BorderBrush = DropLine,
+            BorderBrush = palette.Accent,
             BorderThickness = new Thickness(2),
         }, ghostX, ghostY);
     }
@@ -537,15 +544,16 @@ public partial class GanttCanvas : UserControl
         var lanes = Lanes?.ToList() ?? new List<LaneViewModel>();
         double zoneY  = lanes.Count * LaneH;
         bool   active = _dragToNewLane;
+        var palette = ThemeService.CurrentPalette;
 
         var zone = new Border
         {
             Width = totalW,
             Height = AddLaneZoneH,
             Background = active
-                ? new SolidColorBrush(Color.FromArgb(40, 66, 133, 244))
-                : new SolidColorBrush(Color.FromArgb(10, 66, 133, 244)),
-            BorderBrush = active ? DropLine : new SolidColorBrush(Color.FromRgb(220, 225, 235)),
+                ? palette.AccentGhost
+                : palette.AccentFaint,
+            BorderBrush = active ? palette.Accent : palette.Border,
             BorderThickness = new Thickness(0, 1, 0, 0),
             Cursor = AddLaneFunc != null ? Cursors.Hand : Cursors.Arrow,
         };
@@ -560,22 +568,23 @@ public partial class GanttCanvas : UserControl
     {
         double zoneY  = laneCount * LaneH - verticalOffset;
         bool   active = _dragToNewLane;
+        var palette = ThemeService.CurrentPalette;
 
         var hdr = new Border
         {
             Width = LaneHeaderW,
             Height = AddLaneZoneH,
             Background = active
-                ? new SolidColorBrush(Color.FromArgb(55, 66, 133, 244))
-                : new SolidColorBrush(Color.FromRgb(245, 247, 250)),
-            BorderBrush = active ? DropLine : new SolidColorBrush(Color.FromRgb(220, 225, 235)),
+                ? palette.AccentSubtleStrong
+                : palette.SurfaceMuted,
+            BorderBrush = active ? palette.Accent : palette.Border,
             BorderThickness = new Thickness(0, 1, 1, 0),
             Cursor = AddLaneFunc != null ? Cursors.Hand : Cursors.Arrow,
             Child = new TextBlock
             {
                 Text = "+ 新しいレーン",
                 FontSize = 10,
-                Foreground = active ? DropLine : new SolidColorBrush(Color.FromRgb(148, 158, 178)),
+                Foreground = active ? palette.Accent : palette.TextMuted,
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(0, 0, 10, 0),
@@ -655,9 +664,10 @@ public partial class GanttCanvas : UserControl
             Height = 24,
             FontSize = 11,
             Padding = new Thickness(5, 2, 5, 2),
-            BorderBrush = DropLine,
+            BorderBrush = ThemeService.CurrentPalette.Accent,
             BorderThickness = new Thickness(1.5),
-            Background = Brushes.White,
+            Background = ThemeService.CurrentPalette.Surface,
+            Foreground = ThemeService.CurrentPalette.TextPrimary,
             VerticalContentAlignment = VerticalAlignment.Center,
         };
         _renameBox.KeyDown   += OnRenameKeyDown;
@@ -724,9 +734,10 @@ public partial class GanttCanvas : UserControl
             Height = 24,
             FontSize = 11,
             Padding = new Thickness(5, 2, 5, 2),
-            BorderBrush = DropLine,
+            BorderBrush = ThemeService.CurrentPalette.Accent,
             BorderThickness = new Thickness(1.5),
-            Background = Brushes.White,
+            Background = ThemeService.CurrentPalette.Surface,
+            Foreground = ThemeService.CurrentPalette.TextPrimary,
             VerticalContentAlignment = VerticalAlignment.Center,
         };
         _taskRenameBox.KeyDown += OnTaskRenameKeyDown;
@@ -795,6 +806,7 @@ public partial class GanttCanvas : UserControl
     private void DrawArrows(Dictionary<Guid, ItemViewModel> itemMap)
     {
         var edges = Edges?.ToList() ?? new List<DependencyEdge>();
+        var palette = ThemeService.CurrentPalette;
         foreach (var edge in edges)
         {
             if (!_barRects.TryGetValue(edge.FromId, out var src)) continue;
@@ -805,8 +817,8 @@ public partial class GanttCanvas : UserControl
                           (fi!.StartTime + fi.Duration) <= ti!.StartTime + 1e-9;
 
             var stroke = timeOk
-                ? new SolidColorBrush(Color.FromArgb(140, 60, 120, 200))
-                : ErrorBarFg;
+                ? palette.AccentGhost
+                : palette.Danger;
             double sw = timeOk ? 1.5 : 2;
 
             double x1 = src.Right;
@@ -850,8 +862,8 @@ public partial class GanttCanvas : UserControl
 
             Add(new Border
             {
-                Background = new SolidColorBrush(Color.FromArgb(220, 255, 255, 255)),
-                BorderBrush = GridMajor,
+                Background = palette.Surface,
+                BorderBrush = palette.Border,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(3),
                 Padding = new Thickness(3, 1, 3, 1),
@@ -859,10 +871,30 @@ public partial class GanttCanvas : UserControl
                 {
                     Text = edge.Condition.Length > 16 ? edge.Condition[..13] + "…" : edge.Condition,
                     FontSize = 9,
-                    Foreground = timeOk ? MutedText : ErrorBarFg,
+                    Foreground = timeOk ? palette.TextSecondary : palette.Danger,
                 },
             }, (x1 + x2) / 2 - 28, (y1 + y2) / 2 - 11);
         }
+    }
+
+    private static Brush CreateOverlayBrush()
+    {
+        var color = ThemeService.CurrentPalette.IsDark
+            ? Color.FromArgb(42, 255, 255, 255)
+            : Color.FromArgb(80, 255, 255, 255);
+        return new SolidColorBrush(color);
+    }
+
+    private static Brush CreateMutedOverlayBrush()
+    {
+        var baseColor = ((SolidColorBrush)ThemeService.CurrentPalette.TextSecondary).Color;
+        return new SolidColorBrush(Color.FromArgb(100, baseColor.R, baseColor.G, baseColor.B));
+    }
+
+    private static Brush CreateResizeHandleBrush()
+    {
+        var alpha = ThemeService.CurrentPalette.IsDark ? (byte)90 : (byte)60;
+        return new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255));
     }
 
     // ── Collision avoidance ───────────────────────────────────────────────
@@ -1189,7 +1221,24 @@ public partial class GanttCanvas : UserControl
         }
     }
 
-    private double GetGridStep() => Math.Clamp(CellDuration, 0.0001, 1.0);
+    private IEnumerable<double> EnumerateMajorTicks(double total)
+    {
+        double step = GetGridStep();
+        if (step < 1.0 - 1e-9)
+        {
+            for (int t = 0; t <= (int)Math.Ceiling(total); t++)
+                yield return t;
+        }
+        else
+        {
+            for (double t = 0; t <= total + 1e-9; t = NormalizeTimelineValue(t + step))
+                yield return t;
+        }
+    }
+
+    private static string FormatTickLabel(double value) => value.ToString("0.####");
+
+    private double GetGridStep() => Math.Max(CellDuration, 0.0001);
 
     private double GetPixelsPerTimeUnit() => PixelsPerUnit / GetGridStep();
 
@@ -1261,13 +1310,20 @@ public partial class GanttCanvas : UserControl
 
     private ToolTip BuildTooltip(ItemViewModel item)
     {
+        var palette = ThemeService.CurrentPalette;
         var sp = new StackPanel { Margin = new Thickness(8, 6, 8, 6) };
-        sp.Children.Add(new TextBlock { Text = item.Name, FontWeight = FontWeights.Bold, FontSize = 13 });
+        sp.Children.Add(new TextBlock
+        {
+            Text = item.Name,
+            FontWeight = FontWeights.Bold,
+            FontSize = 13,
+            Foreground = palette.TextPrimary,
+        });
         sp.Children.Add(new TextBlock
         {
             Text = $"開始: {FormatTimelineValue(item.StartTime)} {TimeUnit}  ／  所要: {FormatTimelineValue(item.Duration)} {TimeUnit}  ／  終了: {FormatTimelineValue(item.StartTime + item.Duration)} {TimeUnit}",
             FontSize = 10,
-            Foreground = MutedText,
+            Foreground = palette.TextSecondary,
             Margin = new Thickness(0, 2, 0, 0),
         });
         if (!string.IsNullOrWhiteSpace(item.Description))
@@ -1276,7 +1332,7 @@ public partial class GanttCanvas : UserControl
             {
                 Text = item.Description,
                 FontSize = 11,
-                Foreground = MutedText,
+                Foreground = palette.TextSecondary,
                 Margin = new Thickness(0, 3, 0, 0),
             });
         }
@@ -1285,14 +1341,20 @@ public partial class GanttCanvas : UserControl
             sp.Children.Add(new TextBlock
             {
                 Text = "⚠ " + item.ErrorMessage,
-                Foreground = ErrorBarFg,
+                Foreground = palette.Danger,
                 FontSize = 11,
                 Margin = new Thickness(0, 4, 0, 0),
                 TextWrapping = TextWrapping.Wrap,
                 MaxWidth = 280,
             });
         }
-        return new ToolTip { Content = sp };
+        return new ToolTip
+        {
+            Content = sp,
+            Background = palette.Surface,
+            BorderBrush = palette.Border,
+            Foreground = palette.TextPrimary,
+        };
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

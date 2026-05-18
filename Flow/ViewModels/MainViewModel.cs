@@ -17,7 +17,7 @@ namespace Flow.ViewModels;
 
 public record SuggestionItem(string Value, string Source);
 
-public enum SidebarPanel { ProjectList, ProjectSettings, TaskEditor }
+public enum SidebarPanel { ProjectList, ProjectSettings, TaskEditor, AppSettings }
 
 public partial class MainViewModel : ObservableObject
 {
@@ -26,7 +26,26 @@ public partial class MainViewModel : ObservableObject
     private readonly AppStateService   _appStateService = new();
     private readonly AppState          _appState;
     private readonly DispatcherTimer   _autoSaveTimer;
+    private readonly DispatcherTimer   _cellDurationTimer;
+    private string _cellDurationText = "";
     private bool _suspendAutoSave;
+    private bool _initializingAppearance;
+
+    private static readonly ThemeOption[] AvailableThemeOptions =
+    {
+        new(ThemeService.LightThemeKey, "ライト", "明るいベースで見やすく表示します"),
+        new(ThemeService.DarkThemeKey, "ダーク", "作業面を落ち着いた配色に切り替えます"),
+    };
+
+    private static readonly AccentColorOption[] AvailableAccentOptions =
+    {
+        new("ブルー", "#4285F4"),
+        new("ティール", "#0EA5A4"),
+        new("グリーン", "#2EAD67"),
+        new("オレンジ", "#F59E0B"),
+        new("ローズ", "#EC4899"),
+        new("バイオレット", "#8B5CF6"),
+    };
 
     [ObservableProperty] private string         _projectName = "新しいプロジェクト";
     [ObservableProperty] private string?        _currentFilePath;
@@ -38,19 +57,25 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private double         _totalDuration = 10.0;
     [ObservableProperty] private double         _projectDuration;
     [ObservableProperty] private bool           _hasErrors;
+    [ObservableProperty] private ThemeOption?   _selectedThemeOption;
+    [ObservableProperty] private AccentColorOption? _selectedAccentColorOption;
 
     // Undo delete
     [ObservableProperty] private bool   _canUndoDelete;
     [ObservableProperty] private string _undoMessage = "";
     private ItemViewModel? _deletedItem;
 
+    [ObservableProperty] private string? _cellDurationError;
+
     public ObservableCollection<LaneViewModel>      Lanes           { get; } = new();
     public ObservableCollection<ItemViewModel>      Items           { get; } = new();
     public ObservableCollection<ValidationError>    Errors          { get; } = new();
     public ObservableCollection<DependencyEdge>     DependencyEdges { get; } = new();
     public ObservableCollection<RecentProjectEntry> RecentProjects  { get; } = new();
+    public ObservableCollection<ThemeOption> ThemeOptions { get; } = new();
+    public ObservableCollection<AccentColorOption> AccentColorOptions { get; } = new();
 
-    public static readonly string[] TimeUnitOptions = { "分", "時間", "日", "週", "スプリント" };
+    public static readonly string[] TimeUnitOptions = { "秒", "分", "時間", "日", "週", "スプリント" };
 
     public bool HasRecentProjects => RecentProjects.Count > 0;
 
@@ -59,6 +84,22 @@ public partial class MainViewModel : ObservableObject
         get => ConvertCellDurationToDisplay(CellDuration);
         set => CellDuration = ConvertDisplayToCellDuration(value);
     }
+
+    public string CellDurationText
+    {
+        get => _cellDurationText;
+        set
+        {
+            if (_cellDurationText == value) return;
+            _cellDurationText = value;
+            OnPropertyChanged();
+            CellDurationError = null;
+            _cellDurationTimer.Stop();
+            _cellDurationTimer.Start();
+        }
+    }
+
+    public bool HasCellDurationError => CellDurationError != null;
 
     public string CellDurationUnitLabel => GetCellDurationUnitLabel();
 
@@ -86,6 +127,12 @@ public partial class MainViewModel : ObservableObject
         set { if (value) SetActivePanel(SidebarPanel.TaskEditor); }
     }
 
+    public bool IsAppSettingsActive
+    {
+        get => _activeSidebarPanel == SidebarPanel.AppSettings;
+        set { if (value) SetActivePanel(SidebarPanel.AppSettings); }
+    }
+
     private void SetActivePanel(SidebarPanel panel)
     {
         _activeSidebarPanel = panel;
@@ -94,16 +141,19 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsProjectListActive));
         OnPropertyChanged(nameof(IsProjectSettingsActive));
         OnPropertyChanged(nameof(IsTaskEditorActive));
+        OnPropertyChanged(nameof(IsAppSettingsActive));
     }
 
     public MainViewModel(string? startupProjectPath = null)
     {
         _appState = _appStateService.Load();
-        _autoSaveTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(600)
-        };
+        _autoSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
         _autoSaveTimer.Tick += (_, _) => FlushAutoSave();
+        _cellDurationTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+        _cellDurationTimer.Tick += OnCellDurationTimerTick;
+        _cellDurationText = FormatNumber(ConvertCellDurationToDisplay(_cellDuration));
+
+        InitializeAppearance();
 
         Lanes.CollectionChanged += OnLanesCollectionChanged;
         Items.CollectionChanged += OnItemsCollectionChanged;
@@ -114,6 +164,30 @@ public partial class MainViewModel : ObservableObject
 
         RefreshRecentProjects();
         TryRestoreStartupProject(startupProjectPath);
+    }
+
+    private void InitializeAppearance()
+    {
+        foreach (var option in AvailableThemeOptions)
+            ThemeOptions.Add(option);
+
+        foreach (var option in AvailableAccentOptions)
+            AccentColorOptions.Add(option);
+
+        string themeKey = ThemeService.NormalizeThemeKey(_appState.ThemeKey);
+        string accentColor = ThemeService.NormalizeAccentColor(_appState.AccentColor);
+
+        bool stateChanged = !string.Equals(_appState.ThemeKey, themeKey, StringComparison.Ordinal)
+                         || !string.Equals(_appState.AccentColor, accentColor, StringComparison.OrdinalIgnoreCase);
+
+        _initializingAppearance = true;
+        SelectedThemeOption = ThemeOptions.First(option => option.Key == themeKey);
+        SelectedAccentColorOption = AccentColorOptions.FirstOrDefault(option =>
+            string.Equals(option.ColorHex, accentColor, StringComparison.OrdinalIgnoreCase))
+            ?? AccentColorOptions.First();
+        _initializingAppearance = false;
+
+        ApplyAppearance(persistState: stateChanged);
     }
 
     // ── Suggestions ──────────────────────────────────────────────────────
@@ -416,6 +490,7 @@ public partial class MainViewModel : ObservableObject
             CellDuration = project.CellDuration > 0
                 ? project.CellDuration
                 : project.GridDivisions is > 0 ? 1.0 / project.GridDivisions.Value : 1.0;
+            SyncCellDurationText();
             TotalDuration = project.TotalDuration;
             CurrentFilePath = filePath;
 
@@ -768,6 +843,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnTimeUnitChanged(string value)
     {
         CellDuration = NormalizeCellDuration(CellDuration);
+        SyncCellDurationText();
         OnPropertyChanged(nameof(CellDurationValue));
         OnPropertyChanged(nameof(CellDurationUnitLabel));
         OnPropertyChanged(nameof(CellDurationSummary));
@@ -784,13 +860,75 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
+        SyncCellDurationText();
         OnPropertyChanged(nameof(CellDurationValue));
         OnPropertyChanged(nameof(CellDurationUnitLabel));
         OnPropertyChanged(nameof(CellDurationSummary));
         RequestAutoSave();
     }
 
+    partial void OnCellDurationErrorChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasCellDurationError));
+    }
+
+    private void OnCellDurationTimerTick(object? sender, EventArgs e)
+    {
+        _cellDurationTimer.Stop();
+
+        if (!double.TryParse(_cellDurationText, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.CurrentCulture, out var displayValue) &&
+            !double.TryParse(_cellDurationText, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out displayValue))
+        {
+            CellDurationError = "数値を入力してください";
+            return;
+        }
+
+        if (displayValue <= 0)
+        {
+            CellDurationError = "0より大きい値を入力してください";
+            return;
+        }
+
+        double converted = ConvertDisplayToCellDuration(displayValue);
+        if (converted < 0.0001)
+        {
+            CellDurationError = $"最小値は {FormatNumber(ConvertCellDurationToDisplay(0.0001))} {CellDurationUnitLabel} です";
+            return;
+        }
+
+        CellDurationError = null;
+        CellDuration = converted;
+    }
+
+    private void SyncCellDurationText()
+    {
+        string newText = FormatNumber(ConvertCellDurationToDisplay(CellDuration));
+        if (_cellDurationText == newText) return;
+        _cellDurationTimer.Stop();
+        _cellDurationText = newText;
+        OnPropertyChanged(nameof(CellDurationText));
+        CellDurationError = null;
+    }
+
     partial void OnProjectNameChanged(string value) => RequestAutoSave();
+
+    partial void OnSelectedThemeOptionChanged(ThemeOption? value)
+    {
+        if (_initializingAppearance || value == null)
+            return;
+
+        ApplyAppearance();
+    }
+
+    partial void OnSelectedAccentColorOptionChanged(AccentColorOption? value)
+    {
+        if (_initializingAppearance || value == null)
+            return;
+
+        ApplyAppearance();
+    }
 
     partial void OnCurrentFilePathChanged(string? value)
     {
@@ -801,6 +939,26 @@ public partial class MainViewModel : ObservableObject
     {
         Analyze();
         RequestAutoSave();
+    }
+
+    private void ApplyAppearance(bool persistState = true)
+    {
+        if (SelectedThemeOption == null || SelectedAccentColorOption == null)
+            return;
+
+        string themeKey = ThemeService.NormalizeThemeKey(SelectedThemeOption.Key);
+        string accentColor = ThemeService.NormalizeAccentColor(SelectedAccentColorOption.ColorHex);
+
+        ThemeService.ApplyTheme(themeKey, accentColor);
+
+        bool stateChanged = !string.Equals(_appState.ThemeKey, themeKey, StringComparison.Ordinal)
+                         || !string.Equals(_appState.AccentColor, accentColor, StringComparison.OrdinalIgnoreCase);
+
+        _appState.ThemeKey = themeKey;
+        _appState.AccentColor = accentColor;
+
+        if (persistState && stateChanged)
+            PersistAppState();
     }
 
     private void RequestAutoSave()
@@ -863,10 +1021,10 @@ public partial class MainViewModel : ObservableObject
 
     private static double NormalizeCellDuration(double value)
     {
-        if (double.IsNaN(value) || double.IsInfinity(value))
+        if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0)
             return 1.0;
 
-        return Math.Clamp(value, 0.0001, 1.0);
+        return Math.Max(value, 0.0001);
     }
 
     private static bool TryGetSmallerUnit(string timeUnit, out string smallerUnit, out double scale)

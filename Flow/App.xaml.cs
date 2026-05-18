@@ -1,5 +1,6 @@
 using System;
 using System.Windows;
+using Flow.Services;
 
 namespace Flow;
 
@@ -8,6 +9,9 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        var appState = new AppStateService().Load();
+        ThemeService.ApplyTheme(appState.ThemeKey, appState.AccentColor);
 
         var startupProjectPath = GetStartupProjectPath(e.Args);
         var mainWindow = new MainWindow(startupProjectPath);

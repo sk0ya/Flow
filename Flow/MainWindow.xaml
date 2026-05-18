@@ -9,7 +9,7 @@
         Height="740" Width="1280"
         MinHeight="560" MinWidth="800"
         WindowStyle="None"
-        Background="#F0F2F5" FontFamily="Segoe UI">
+        Background="{DynamicResource AppWindowBackgroundBrush}" FontFamily="Segoe UI">
 
     <Window.InputBindings>
         <KeyBinding Key="S" Modifiers="Ctrl" Command="{Binding SaveProjectCommand}"/>
@@ -34,8 +34,9 @@
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="#DDE3EE"/>
-            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -47,10 +48,12 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#EEF2FF"/>
+                                <Setter Property="Background" Value="{DynamicResource AppAccentSubtleBrush}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource AppAccentOutlineBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#D8E0FF"/>
+                                <Setter Property="Background" Value="{DynamicResource AppAccentSubtleStrongBrush}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -59,12 +62,12 @@
         </Style>
 
         <Style x:Key="PrimaryBtn" TargetType="Button" BasedOn="{StaticResource FlatBtn}">
-            <Setter Property="Background" Value="#4285F4"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderBrush" Value="#3070D8"/>
+            <Setter Property="Background" Value="{DynamicResource AppAccentBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppAccentTextBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppAccentStrongBrush}"/>
             <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#3070D8"/></Trigger>
-                <Trigger Property="IsPressed"   Value="True"><Setter Property="Background" Value="#2060C8"/></Trigger>
+                <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource AppAccentHoverBrush}"/></Trigger>
+                <Trigger Property="IsPressed"   Value="True"><Setter Property="Background" Value="{DynamicResource AppAccentPressedBrush}"/></Trigger>
             </Style.Triggers>
         </Style>
 
@@ -75,18 +78,18 @@
             <Setter Property="Margin" Value="0"/>
             <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
             <Setter Property="FontSize" Value="16"/>
-            <Setter Property="Foreground" Value="#5F6368"/>
-            <Setter Property="Background" Value="#F8F9FA"/>
-            <Setter Property="BorderBrush" Value="#E2E6EE"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppTextSecondaryBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceAltBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderSoftBrush}"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#EEF2FF"/>
-                    <Setter Property="BorderBrush" Value="#CCD7F4"/>
+                    <Setter Property="Background" Value="{DynamicResource AppAccentSubtleBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource AppAccentOutlineBrush}"/>
                 </Trigger>
                 <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="Background" Value="#E3EAFF"/>
-                    <Setter Property="BorderBrush" Value="#B7C8F0"/>
+                    <Setter Property="Background" Value="{DynamicResource AppAccentSubtleStrongBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -94,9 +97,11 @@
         <Style x:Key="InputBox" TargetType="TextBox">
             <Setter Property="Padding" Value="7,5"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="BorderBrush" Value="#DDE3EE"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource AppAccentBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Background" Value="White"/>
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
@@ -108,7 +113,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsFocused" Value="True">
-                                <Setter Property="BorderBrush" Value="#4285F4"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
                                 <Setter Property="BorderThickness" Value="2"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -123,7 +128,7 @@
             <Setter Property="Margin" Value="0"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="#5F6368"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppTextSecondaryBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Focusable" Value="False"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -136,10 +141,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bg" Property="Background" Value="#EEF2FF"/>
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource AppAccentSubtleBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bg" Property="Background" Value="#D8E0FF"/>
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource AppAccentSubtleStrongBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -171,7 +176,7 @@
                         <TextBlock Text="✕" FontSize="9" Foreground="{TemplateBinding Foreground}"/>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Foreground" Value="#F44336"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AppDangerBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -183,10 +188,10 @@
             <Border Margin="2" CornerRadius="12" Padding="2,0,7,0">
                 <Border.Style>
                     <Style TargetType="Border">
-                        <Setter Property="Background" Value="#E3F2FD"/>
+                        <Setter Property="Background" Value="{DynamicResource AppInfoSurfaceBrush}"/>
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding IsLinked}" Value="False">
-                                <Setter Property="Background" Value="#FFEBEE"/>
+                                <Setter Property="Background" Value="{DynamicResource AppDangerSurfaceBrush}"/>
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
@@ -196,10 +201,10 @@
                     <Border Width="4" CornerRadius="2,0,0,2" Margin="0,2,6,2">
                         <Border.Style>
                             <Style TargetType="Border">
-                                <Setter Property="Background" Value="#42A5F5"/>
+                                <Setter Property="Background" Value="{DynamicResource AppInfoBrush}"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsLinked}" Value="False">
-                                        <Setter Property="Background" Value="#EF5350"/>
+                                        <Setter Property="Background" Value="{DynamicResource AppDangerBrush}"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -208,16 +213,16 @@
                     <TextBlock Text="{Binding Value}" FontSize="11" VerticalAlignment="Center">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
-                                <Setter Property="Foreground" Value="#1565C0"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AppInfoBrush}"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsLinked}" Value="False">
-                                        <Setter Property="Foreground" Value="#C62828"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource AppDangerBrush}"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
-                    <Button Style="{StaticResource ChipX}" Foreground="#90CAF9"
+                    <Button Style="{StaticResource ChipX}" Foreground="{DynamicResource AppInfoBrush}"
                             Command="{Binding DataContext.RemovePreConditionCommand,
                                 RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
                             CommandParameter="{Binding}"/>
@@ -229,10 +234,10 @@
             <Border Margin="2" CornerRadius="12" Padding="2,0,7,0">
                 <Border.Style>
                     <Style TargetType="Border">
-                        <Setter Property="Background" Value="#E8F5E9"/>
+                        <Setter Property="Background" Value="{DynamicResource AppSuccessSurfaceBrush}"/>
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding IsLinked}" Value="False">
-                                <Setter Property="Background" Value="#F5F5F5"/>
+                                <Setter Property="Background" Value="{DynamicResource AppNeutralSurfaceBrush}"/>
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
@@ -242,10 +247,10 @@
                     <Border Width="4" CornerRadius="2,0,0,2" Margin="0,2,6,2">
                         <Border.Style>
                             <Style TargetType="Border">
-                                <Setter Property="Background" Value="#66BB6A"/>
+                                <Setter Property="Background" Value="{DynamicResource AppSuccessBrush}"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsLinked}" Value="False">
-                                        <Setter Property="Background" Value="#BDBDBD"/>
+                                        <Setter Property="Background" Value="{DynamicResource AppNeutralBrush}"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -254,16 +259,16 @@
                     <TextBlock Text="{Binding Value}" FontSize="11" VerticalAlignment="Center">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
-                                <Setter Property="Foreground" Value="#2E7D32"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AppSuccessBrush}"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsLinked}" Value="False">
-                                        <Setter Property="Foreground" Value="#757575"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource AppNeutralBrush}"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
-                    <Button Style="{StaticResource ChipX}" Foreground="#A5D6A7"
+                    <Button Style="{StaticResource ChipX}" Foreground="{DynamicResource AppSuccessBrush}"
                             Command="{Binding DataContext.RemovePostConditionCommand,
                                 RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
                             CommandParameter="{Binding}"/>
@@ -288,21 +293,188 @@
                                        FontSize="18"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"
-                                       Foreground="#858585"/>
+                                       Foreground="{DynamicResource AppActivityBarIconBrush}"/>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Ico" Property="Foreground" Value="White"/>
-                                <Setter TargetName="Bar" Property="Background" Value="#4285F4"/>
-                                <Setter TargetName="Bg" Property="Background" Value="#37373D"/>
+                                <Setter TargetName="Ico" Property="Foreground" Value="{DynamicResource AppInverseTextBrush}"/>
+                                <Setter TargetName="Bar" Property="Background" Value="{DynamicResource AppAccentBrush}"/>
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource AppActivityBarSelectedBackgroundBrush}"/>
                             </Trigger>
                             <MultiTrigger>
                                 <MultiTrigger.Conditions>
                                     <Condition Property="IsMouseOver" Value="True"/>
                                     <Condition Property="IsChecked" Value="False"/>
                                 </MultiTrigger.Conditions>
-                                <Setter TargetName="Bg" Property="Background" Value="#3C3C3C"/>
-                                <Setter TargetName="Ico" Property="Foreground" Value="#CCCCCC"/>
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource AppActivityBarHoverBrush}"/>
+                                <Setter TargetName="Ico" Property="Foreground" Value="{DynamicResource AppActivityBarIconHoverBrush}"/>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="InputComboBoxItem" TargetType="ComboBoxItem">
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Bg" Background="Transparent" Padding="{TemplateBinding Padding}" CornerRadius="6">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource AppAccentSubtleBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource AppAccentSubtleStrongBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="InputComboBox" TargetType="ComboBox">
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource InputComboBoxItem}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Border x:Name="Bd"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="6"/>
+                            <Grid Margin="{TemplateBinding Padding}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Grid.Column="0"
+                                                  Content="{TemplateBinding SelectionBoxItem}"
+                                                  ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                  VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1"
+                                           Text="▼"
+                                           FontSize="9"
+                                           Margin="8,0,0,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource AppTextMutedBrush}"/>
+                            </Grid>
+                            <ToggleButton x:Name="PART_ToggleButton"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                          ClickMode="Press"
+                                          Focusable="False">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Rectangle Fill="Transparent"/>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <Popup x:Name="PART_Popup"
+                                   Placement="Bottom"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   PopupAnimation="Fade">
+                                <Border Margin="0,4,0,0"
+                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                        Background="{DynamicResource AppSurfaceBrush}"
+                                        BorderBrush="{DynamicResource AppBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="8">
+                                    <ScrollViewer MaxHeight="220">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger SourceName="PART_ToggleButton" Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AppAccentOutlineBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderThickness" Value="2"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.6"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ThemeOptionItem" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bg"
+                                Background="{DynamicResource AppSurfaceAltBrush}"
+                                BorderBrush="{DynamicResource AppBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource AppAccentSubtleBrush}"/>
+                                <Setter TargetName="Bg" Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                    <Condition Property="IsSelected" Value="False"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource AppSurfaceMutedBrush}"/>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="AccentOptionItem" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="8"/>
+            <Setter Property="Margin" Value="0,0,8,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bg"
+                                Background="{DynamicResource AppSurfaceAltBrush}"
+                                BorderBrush="{DynamicResource AppBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource AppAccentSubtleBrush}"/>
+                                <Setter TargetName="Bg" Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                    <Condition Property="IsSelected" Value="False"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource AppSurfaceMutedBrush}"/>
                             </MultiTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -319,7 +491,7 @@
         </Grid.RowDefinitions>
 
         <!-- ════ TOOLBAR ════ -->
-        <Border Grid.Row="0" Background="White" BorderBrush="#DDE3EE" BorderThickness="0,0,0,1">
+        <Border Grid.Row="0" Background="{DynamicResource AppSurfaceBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1">
             <Grid Margin="14,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -329,25 +501,25 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,18,0"
                             IsHitTestVisible="False">
-                    <TextBlock Text="⬡" FontSize="20" Foreground="#4285F4" VerticalAlignment="Center"/>
-                    <TextBlock Text=" Flow" FontSize="16" FontWeight="Bold" Foreground="#202124" VerticalAlignment="Center"/>
+                    <TextBlock Text="⬡" FontSize="20" Foreground="{DynamicResource AppAccentBrush}" VerticalAlignment="Center"/>
+                    <TextBlock Text=" Flow" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AppTextPrimaryBrush}" VerticalAlignment="Center"/>
                 </StackPanel>
                 <TextBlock Grid.Column="1" Text="{Binding ProjectName}"
-                           FontSize="13" FontWeight="SemiBold" Foreground="#5F6368"
+                           FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource AppTextSecondaryBrush}"
                            HorizontalAlignment="Center" VerticalAlignment="Center"
                            Margin="12,0" TextTrimming="CharacterEllipsis"
                            IsHitTestVisible="False"/>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
                             IsHitTestVisible="False">
-                    <Border Background="#E8F0FE" CornerRadius="8" Padding="10,4" Margin="0,0,8,0">
+                    <Border Background="{DynamicResource AppAccentSubtleBrush}" CornerRadius="8" Padding="10,4" Margin="0,0,8,0">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="プロジェクト期間  " FontSize="11" Foreground="#5F6368" VerticalAlignment="Center"/>
+                            <TextBlock Text="プロジェクト期間  " FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding ProjectDuration, StringFormat={}{0:0.####}}"
-                                       FontSize="14" FontWeight="Bold" Foreground="#4285F4" VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding TimeUnit}" FontSize="11" Foreground="#5F6368" VerticalAlignment="Center" Margin="2,0,0,0"/>
+                                       FontSize="14" FontWeight="Bold" Foreground="{DynamicResource AppAccentBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding TimeUnit}" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}" VerticalAlignment="Center" Margin="2,0,0,0"/>
                         </StackPanel>
                     </Border>
-                    <Border Background="#FFEBEE" CornerRadius="8" Padding="10,4">
+                    <Border Background="{DynamicResource AppDangerSurfaceBrush}" CornerRadius="8" Padding="10,4">
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Visibility" Value="Collapsed"/>
@@ -358,7 +530,7 @@
                                 </Style.Triggers>
                             </Style>
                         </Border.Style>
-                        <TextBlock FontSize="11" Foreground="#C62828">
+                        <TextBlock FontSize="11" Foreground="{DynamicResource AppDangerBrush}">
                             <Run Text="⚠ "/>
                             <Run Text="{Binding Errors.Count, Mode=OneWay}"/>
                             <Run Text=" 件のエラー"/>
@@ -400,7 +572,7 @@
             </Grid.ColumnDefinitions>
 
             <!-- ── ACTIVITY BAR ── -->
-            <Border Grid.Column="0" Background="#252526" BorderBrush="#1A1A1A" BorderThickness="0,0,1,0">
+            <Border Grid.Column="0" Background="{DynamicResource AppActivityBarBackgroundBrush}" BorderBrush="{DynamicResource AppActivityBarBorderBrush}" BorderThickness="0,0,1,0">
                 <StackPanel VerticalAlignment="Top" Margin="0,4,0,0">
                     <RadioButton Style="{StaticResource ActivityBtn}"
                                  Content="☰"
@@ -414,11 +586,15 @@
                                  Content="✏"
                                  IsChecked="{Binding IsTaskEditorActive, Mode=TwoWay}"
                                  ToolTip="タスク編集"/>
+                    <RadioButton Style="{StaticResource ActivityBtn}"
+                                 Content="☼"
+                                 IsChecked="{Binding IsAppSettingsActive, Mode=TwoWay}"
+                                 ToolTip="アプリ設定"/>
                 </StackPanel>
             </Border>
 
             <!-- ── SIDEBAR ── -->
-            <Grid Grid.Column="1" Background="White">
+            <Grid Grid.Column="1" Background="{DynamicResource AppSurfaceBrush}">
 
                 <!-- Panel: プロジェクト一覧 -->
                 <Grid Visibility="{Binding IsProjectListActive, Converter={StaticResource BoolVis}}">
@@ -427,11 +603,11 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <Border Grid.Row="0" Background="#F8F9FA" BorderBrush="#EEE" BorderThickness="0,0,0,1" Padding="12,8">
-                        <TextBlock Text="プロジェクト" FontSize="10" FontWeight="SemiBold" Foreground="#5F6368"/>
+                    <Border Grid.Row="0" Background="{DynamicResource AppSurfaceAltBrush}" BorderBrush="{DynamicResource AppBorderSoftBrush}" BorderThickness="0,0,0,1" Padding="12,8">
+                        <TextBlock Text="プロジェクト" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
                     </Border>
                     <StackPanel Grid.Row="1" Margin="12,12,12,8">
-                        <Border Background="#F8F9FA" BorderBrush="#EEE" BorderThickness="1" CornerRadius="10" Padding="10">
+                        <Border Background="{DynamicResource AppSurfaceAltBrush}" BorderBrush="{DynamicResource AppBorderSoftBrush}" BorderThickness="1" CornerRadius="10" Padding="10">
                             <StackPanel>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                                     <Button Style="{StaticResource ProjectIconBtn}"
@@ -451,7 +627,7 @@
                                 </StackPanel>
                                 <TextBlock Text="{Binding CurrentFilePath, TargetNullValue=未保存のプロジェクト}"
                                            FontSize="10"
-                                           Foreground="#9AA0A6"
+                                           Foreground="{DynamicResource AppTextMutedBrush}"
                                            Margin="0,10,0,0"
                                            TextTrimming="CharacterEllipsis"
                                            ToolTip="{Binding CurrentFilePath}"/>
@@ -459,10 +635,10 @@
                         </Border>
                     </StackPanel>
                     <Border Grid.Row="2" Margin="12,0" Padding="0,10"
-                            BorderBrush="#EEE" BorderThickness="0,1,0,0">
+                            BorderBrush="{DynamicResource AppBorderSoftBrush}" BorderThickness="0,1,0,0">
                         <StackPanel>
                             <TextBlock Text="最近使ったファイル" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="#9AA0A6" Margin="0,0,0,6"/>
+                                       Foreground="{DynamicResource AppTextMutedBrush}" Margin="0,0,0,6"/>
                             <ListBox ItemsSource="{Binding RecentProjects}"
                                      SelectedItem="{Binding SelectedRecentProject, Mode=TwoWay}"
                                      Background="Transparent"
@@ -503,12 +679,12 @@
                                                 HorizontalContentAlignment="Left"
                                                 Padding="10,8">
                                             <Button.Style>
-                                                <Style TargetType="Button" BasedOn="{StaticResource FlatBtn}">
+                                                    <Style TargetType="Button" BasedOn="{StaticResource FlatBtn}">
                                                     <Setter Property="Margin" Value="0"/>
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsSelected}" Value="True">
-                                                            <Setter Property="Background" Value="#E8F0FE"/>
-                                                            <Setter Property="BorderBrush" Value="#4285F4"/>
+                                                            <Setter Property="Background" Value="{DynamicResource AppAccentSubtleBrush}"/>
+                                                            <Setter Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -516,17 +692,17 @@
                                             <StackPanel>
                                                 <TextBlock Text="{Binding DisplayName}"
                                                            FontSize="12"
-                                                           Foreground="#202124"/>
+                                                           Foreground="{DynamicResource AppTextPrimaryBrush}"/>
                                                 <TextBlock Text="{Binding DirectoryPath}"
                                                            FontSize="10"
-                                                           Foreground="#9AA0A6"
+                                                           Foreground="{DynamicResource AppTextMutedBrush}"
                                                            TextTrimming="CharacterEllipsis"/>
                                             </StackPanel>
                                         </Button>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
                             </ListBox>
-                            <TextBlock Text="（なし）" FontSize="10" Foreground="#C5C5C5" FontStyle="Italic">
+                            <TextBlock Text="（なし）" FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" FontStyle="Italic">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Visibility" Value="Visible"/>
@@ -548,21 +724,22 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <Border Grid.Row="0" Background="#F8F9FA" BorderBrush="#EEE" BorderThickness="0,0,0,1" Padding="12,8">
-                        <TextBlock Text="プロジェクト設定" FontSize="10" FontWeight="SemiBold" Foreground="#5F6368"/>
+                    <Border Grid.Row="0" Background="{DynamicResource AppSurfaceAltBrush}" BorderBrush="{DynamicResource AppBorderSoftBrush}" BorderThickness="0,0,0,1" Padding="12,8">
+                        <TextBlock Text="プロジェクト設定" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
                     </Border>
                     <StackPanel Grid.Row="1" Margin="12,12,12,0">
                         <TextBlock Text="プロジェクト名" FontSize="10" FontWeight="SemiBold"
-                                   Foreground="#5F6368" Margin="0,0,0,4"/>
+                                   Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,0,0,4"/>
                         <TextBox Style="{StaticResource InputBox}" FontSize="12"
                                  Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}"/>
                         <TextBlock Text="時間単位" FontSize="10" FontWeight="SemiBold"
-                                   Foreground="#5F6368" Margin="0,14,0,4"/>
+                                   Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,14,0,4"/>
                         <ComboBox ItemsSource="{x:Static vm:MainViewModel.TimeUnitOptions}"
                                   SelectedItem="{Binding TimeUnit}"
-                                  FontSize="12" Height="30" VerticalContentAlignment="Center"/>
+                                  Style="{StaticResource InputComboBox}"
+                                  FontSize="12" VerticalContentAlignment="Center"/>
                         <TextBlock Text="全体期間" FontSize="10" FontWeight="SemiBold"
-                                   Foreground="#5F6368" Margin="0,14,0,4"/>
+                                   Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,14,0,4"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -571,22 +748,111 @@
                             <TextBox Style="{StaticResource InputBox}" FontSize="12"
                                      Text="{Binding TotalDuration, UpdateSourceTrigger=PropertyChanged}"/>
                             <TextBlock Grid.Column="1" Text="{Binding TimeUnit}" FontSize="11"
-                                       Foreground="#9AA0A6" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                       Foreground="{DynamicResource AppTextMutedBrush}" VerticalAlignment="Center" Margin="6,0,0,0"/>
                         </Grid>
                         <TextBlock Text="1マスあたりの時間" FontSize="10" FontWeight="SemiBold"
-                                   Foreground="#5F6368" Margin="0,14,0,4"/>
+                                   Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,14,0,4"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <TextBox Style="{StaticResource InputBox}" FontSize="12"
-                                     Text="{Binding CellDurationValue, StringFormat={}{0:0.####}, UpdateSourceTrigger=PropertyChanged}"/>
+                                     Text="{Binding CellDurationText, UpdateSourceTrigger=PropertyChanged}"/>
                             <TextBlock Grid.Column="1" Text="{Binding CellDurationUnitLabel}" FontSize="11"
-                                       Foreground="#9AA0A6" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                       Foreground="{DynamicResource AppTextMutedBrush}" VerticalAlignment="Center" Margin="6,0,0,0"/>
                         </Grid>
-                        <TextBlock Text="{Binding CellDurationSummary}" FontSize="10" Foreground="#5F6368" Margin="0,6,0,0"/>
+                        <TextBlock Text="{Binding CellDurationSummary}" FontSize="10" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,6,0,0"/>
+                        <TextBlock Text="{Binding CellDurationError}" FontSize="10"
+                                   Foreground="{DynamicResource AppDangerBrush}" Margin="0,4,0,0"
+                                   Visibility="{Binding HasCellDurationError, Converter={StaticResource BoolVis}}"/>
                     </StackPanel>
+                </Grid>
+
+                <!-- Panel: アプリ設定 -->
+                <Grid Visibility="{Binding IsAppSettingsActive, Converter={StaticResource BoolVis}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Border Grid.Row="0" Background="{DynamicResource AppSurfaceAltBrush}" BorderBrush="{DynamicResource AppBorderSoftBrush}" BorderThickness="0,0,0,1" Padding="12,8">
+                        <TextBlock Text="アプリ設定" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                    </Border>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="12,12,12,16">
+                            <TextBlock Text="カラーテーマ" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,0,0,6"/>
+                            <ListBox ItemsSource="{Binding ThemeOptions}"
+                                     SelectedItem="{Binding SelectedThemeOption, Mode=TwoWay}"
+                                     BorderThickness="0"
+                                     Background="Transparent"
+                                     ItemContainerStyle="{StaticResource ThemeOptionItem}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:ThemeOption}">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                            <TextBlock Text="{Binding Description}" FontSize="10" Margin="0,3,0,0"
+                                                       Foreground="{DynamicResource AppTextMutedBrush}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <TextBlock Text="アクセントカラー" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,10,0,6"/>
+                            <ListBox ItemsSource="{Binding AccentColorOptions}"
+                                     SelectedItem="{Binding SelectedAccentColorOption, Mode=TwoWay}"
+                                     BorderThickness="0"
+                                     Background="Transparent"
+                                     ItemContainerStyle="{StaticResource AccentOptionItem}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ListBox.ItemsPanel>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:AccentColorOption}">
+                                        <StackPanel Width="62">
+                                            <Border Width="22" Height="22"
+                                                    Background="{Binding SwatchBrush}"
+                                                    BorderBrush="{DynamicResource AppSurfaceBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="11"
+                                                    HorizontalAlignment="Center"/>
+                                            <TextBlock Text="{Binding Name}" FontSize="9" Margin="0,6,0,0"
+                                                       TextAlignment="Center"
+                                                       Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <Border Margin="0,12,0,0"
+                                    Padding="12"
+                                    Background="{DynamicResource AppSurfaceAltBrush}"
+                                    BorderBrush="{DynamicResource AppBorderSoftBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="10">
+                                <StackPanel>
+                                    <TextBlock Text="プレビュー" FontSize="10" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                                    <Border Margin="0,8,0,0"
+                                            Padding="10,8"
+                                            Background="{DynamicResource AppAccentSubtleBrush}"
+                                            CornerRadius="8">
+                                        <DockPanel>
+                                            <Ellipse Width="8" Height="8" Fill="{DynamicResource AppAccentBrush}" Margin="0,0,8,0"/>
+                                            <TextBlock Text="変更はすぐに UI に反映されます"
+                                                       Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                                       VerticalAlignment="Center"/>
+                                        </DockPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
                 </Grid>
 
                 <!-- Panel: タスク編集 -->
@@ -599,10 +865,10 @@
                     </Grid.RowDefinitions>
 
                     <!-- Add task -->
-                    <Border Grid.Row="0" Background="#F8F9FA" BorderBrush="#EEE" BorderThickness="0,0,0,1" Padding="10,10">
+                    <Border Grid.Row="0" Background="{DynamicResource AppSurfaceAltBrush}" BorderBrush="{DynamicResource AppBorderSoftBrush}" BorderThickness="0,0,0,1" Padding="10,10">
                         <StackPanel>
                             <TextBlock Text="タスクを追加" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="#5F6368" Margin="0,0,0,5"/>
+                                       Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,0,0,5"/>
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -622,7 +888,7 @@
 
                     <!-- Editor header -->
                     <Border Grid.Row="1" Padding="10,6"
-                            Background="#F0F4FF" BorderBrush="#DDE8FF" BorderThickness="0,0,0,1">
+                            Background="{DynamicResource AppAccentSubtleBrush}" BorderBrush="{DynamicResource AppAccentOutlineBrush}" BorderThickness="0,0,0,1">
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Visibility" Value="Visible"/>
@@ -634,19 +900,19 @@
                             </Style>
                         </Border.Style>
                         <Grid>
-                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#4285F4" VerticalAlignment="Center">
+                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AppAccentBrush}" VerticalAlignment="Center">
                                 <Run Text="✏  "/>
                                 <Run Text="{Binding SelectedItem.Name, Mode=OneWay, FallbackValue=''}"/>
                             </TextBlock>
-                            <TextBlock Text="Delete で削除" FontSize="9" Foreground="#9AA0A6"
+                            <TextBlock Text="Delete で削除" FontSize="9" Foreground="{DynamicResource AppTextMutedBrush}"
                                        HorizontalAlignment="Right" VerticalAlignment="Center"/>
                         </Grid>
                     </Border>
 
                     <!-- Empty state -->
                     <Border Grid.Row="2" Margin="16,30" Padding="14"
-                            Background="#F8F9FA" CornerRadius="10"
-                            BorderBrush="#E8EAED" BorderThickness="1">
+                            Background="{DynamicResource AppSurfaceAltBrush}" CornerRadius="10"
+                            BorderBrush="{DynamicResource AppBorderSoftBrush}" BorderThickness="1">
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Visibility" Value="Collapsed"/>
@@ -659,12 +925,12 @@
                         </Border.Style>
                         <StackPanel>
                             <TextBlock Text="タスクを選択" FontSize="12" FontWeight="SemiBold"
-                                       Foreground="#5F6368" HorizontalAlignment="Center"/>
+                                       Foreground="{DynamicResource AppTextSecondaryBrush}" HorizontalAlignment="Center"/>
                             <TextBlock Text="ガントのバーをクリックすると編集できます"
-                                       FontSize="10" Foreground="#9AA0A6" TextWrapping="Wrap"
+                                       FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" TextWrapping="Wrap"
                                        Margin="0,5,0,0" TextAlignment="Center"/>
                             <TextBlock Text="バーをドラッグ → 時刻・レーン変更&#xa;右端をドラッグ → 長さ変更"
-                                       FontSize="10" Foreground="#9AA0A6" TextWrapping="Wrap"
+                                       FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" TextWrapping="Wrap"
                                        Margin="0,4,0,0" TextAlignment="Center"/>
                         </StackPanel>
                     </Border>
@@ -686,7 +952,7 @@
                         <StackPanel Margin="10,8,10,4">
 
                             <!-- Name -->
-                            <TextBlock Text="名前" FontSize="10" FontWeight="SemiBold" Foreground="#5F6368" Margin="0,0,0,4"/>
+                            <TextBlock Text="名前" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,0,0,4"/>
                             <TextBox Style="{StaticResource InputBox}" FontSize="13"
                                      Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
 
@@ -699,13 +965,13 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
                                     <TextBlock Text="開始" FontSize="10" FontWeight="SemiBold"
-                                               Foreground="#5F6368" Margin="0,0,0,4"/>
+                                               Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,0,0,4"/>
                                     <TextBox Style="{StaticResource InputBox}" FontSize="12"
                                              Text="{Binding StartTime, StringFormat={}{0:0.####}, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Text="所要時間" FontSize="10" FontWeight="SemiBold"
-                                               Foreground="#5F6368" Margin="0,0,0,4"/>
+                                               Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,0,0,4"/>
                                     <TextBox Style="{StaticResource InputBox}" FontSize="12"
                                              Text="{Binding Duration, StringFormat={}{0:0.####}, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
@@ -713,17 +979,18 @@
 
                             <!-- Lane selector -->
                             <TextBlock Text="レーン" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="#5F6368" Margin="0,10,0,4"/>
+                                       Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,10,0,4"/>
                             <ComboBox ItemsSource="{Binding DataContext.Lanes, RelativeSource={RelativeSource AncestorType=Window}}"
                                       SelectedValuePath="Id"
                                       SelectedValue="{Binding LaneId}"
                                       DisplayMemberPath="Name"
-                                      FontSize="12" Height="30"
+                                      Style="{StaticResource InputComboBox}"
+                                      FontSize="12"
                                       VerticalContentAlignment="Center"/>
 
                             <!-- Description -->
                             <TextBlock Text="説明（任意）" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="#5F6368" Margin="0,10,0,4"/>
+                                       Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,10,0,4"/>
                             <TextBox Style="{StaticResource InputBox}" FontSize="11"
                                      Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
                                      AcceptsReturn="True" MaxLines="3" MinHeight="40" TextWrapping="Wrap"/>
@@ -735,12 +1002,12 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="事前条件" FontSize="11" FontWeight="Bold" Foreground="#1565C0" VerticalAlignment="Center"/>
-                                    <Border Background="#E3F2FD" CornerRadius="8" Padding="5,1" Margin="5,0,0,0">
-                                        <TextBlock Text="{Binding PreConditions.Count}" FontSize="9" Foreground="#4285F4"/>
+                                    <TextBlock Text="事前条件" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AppInfoBrush}" VerticalAlignment="Center"/>
+                                    <Border Background="{DynamicResource AppInfoSurfaceBrush}" CornerRadius="8" Padding="5,1" Margin="5,0,0,0">
+                                        <TextBlock Text="{Binding PreConditions.Count}" FontSize="9" Foreground="{DynamicResource AppInfoBrush}"/>
                                     </Border>
                                 </StackPanel>
-                                <TextBlock Grid.Column="1" Text="開始前に必要" FontSize="9" Foreground="#9AA0A6" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="開始前に必要" FontSize="9" Foreground="{DynamicResource AppTextMutedBrush}" VerticalAlignment="Center"/>
                             </Grid>
                             <ItemsControl ItemsSource="{Binding PreConditions}" ItemTemplate="{StaticResource PreChip}">
                                 <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -765,12 +1032,12 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="事後条件" FontSize="11" FontWeight="Bold" Foreground="#2E7D32" VerticalAlignment="Center"/>
-                                    <Border Background="#E8F5E9" CornerRadius="8" Padding="5,1" Margin="5,0,0,0">
-                                        <TextBlock Text="{Binding PostConditions.Count}" FontSize="9" Foreground="#388E3C"/>
+                                    <TextBlock Text="事後条件" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AppSuccessBrush}" VerticalAlignment="Center"/>
+                                    <Border Background="{DynamicResource AppSuccessSurfaceBrush}" CornerRadius="8" Padding="5,1" Margin="5,0,0,0">
+                                        <TextBlock Text="{Binding PostConditions.Count}" FontSize="9" Foreground="{DynamicResource AppSuccessBrush}"/>
                                     </Border>
                                 </StackPanel>
-                                <TextBlock Grid.Column="1" Text="完了後の状態" FontSize="9" Foreground="#9AA0A6" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="完了後の状態" FontSize="9" Foreground="{DynamicResource AppTextMutedBrush}" VerticalAlignment="Center"/>
                             </Grid>
                             <ItemsControl ItemsSource="{Binding PostConditions}" ItemTemplate="{StaticResource PostChip}">
                                 <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -793,13 +1060,13 @@
 
                     <!-- Undo toast -->
                     <Border Grid.Row="3" Padding="12,8" Margin="8,4,8,6"
-                            Background="#323232" CornerRadius="8"
+                            Background="{DynamicResource AppToastBackgroundBrush}" CornerRadius="8"
                             Visibility="{Binding CanUndoDelete, Converter={StaticResource BoolVis}}">
                         <Grid>
-                            <TextBlock Text="{Binding UndoMessage}" Foreground="White" FontSize="11" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding UndoMessage}" Foreground="{DynamicResource AppInverseTextBrush}" FontSize="11" VerticalAlignment="Center"/>
                             <Button Content="元に戻す" HorizontalAlignment="Right"
                                     FontSize="11" FontWeight="SemiBold"
-                                    Foreground="#82B1FF" Background="Transparent" BorderThickness="0"
+                                    Foreground="{DynamicResource AppAccentBrush}" Background="Transparent" BorderThickness="0"
                                     Cursor="Hand" Command="{Binding UndoDeleteCommand}">
                                 <Button.Template>
                                     <ControlTemplate TargetType="Button">
@@ -807,7 +1074,7 @@
                                                    FontSize="{TemplateBinding FontSize}" FontWeight="{TemplateBinding FontWeight}"/>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Foreground" Value="White"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource AppInverseTextBrush}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
@@ -820,7 +1087,7 @@
             </Grid>
 
             <GridSplitter Grid.Column="2" Width="5" HorizontalAlignment="Stretch"
-                          Background="#DDE3EE" Cursor="SizeWE"/>
+                          Background="{DynamicResource AppBorderBrush}" Cursor="SizeWE"/>
 
             <!-- ── RIGHT: Gantt canvas ── -->
             <controls:GanttCanvas Grid.Column="3"
@@ -836,7 +1103,7 @@
         </Grid>
 
         <!-- ════ ERROR PANEL ════ -->
-        <Border Grid.Row="2" Background="#FFF8E1" BorderBrush="#FFE082" BorderThickness="0,1,0,0" MaxHeight="100">
+        <Border Grid.Row="2" Background="{DynamicResource AppWarningSurfaceBrush}" BorderBrush="{DynamicResource AppWarningBorderBrush}" BorderThickness="0,1,0,0" MaxHeight="100">
             <Border.Style>
                 <Style TargetType="Border">
                     <Setter Property="Visibility" Value="Collapsed"/>
@@ -852,12 +1119,12 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="⚠" FontSize="13" Foreground="#F57F17" Margin="0,2,10,0" VerticalAlignment="Top"/>
+                <TextBlock Text="⚠" FontSize="13" Foreground="{DynamicResource AppWarningBrush}" Margin="0,2,10,0" VerticalAlignment="Top"/>
                 <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
                     <ItemsControl ItemsSource="{Binding Errors}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <TextBlock FontSize="11" Foreground="#E65100" Margin="0,2"
+                                <TextBlock FontSize="11" Foreground="{DynamicResource AppWarningTextBrush}" Margin="0,2"
                                            Text="{Binding Message}" TextWrapping="Wrap"/>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -869,16 +1136,16 @@
         <!-- Suggestions popup -->
         <Popup x:Name="SuggestionsPopup" Grid.RowSpan="3"
                Placement="Bottom" AllowsTransparency="True" StaysOpen="False">
-            <Border Background="White" BorderBrush="#DDE3EE" BorderThickness="1"
+            <Border Background="{DynamicResource AppSurfaceBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1"
                     CornerRadius="8" MinWidth="200" MaxWidth="300">
                 <Border.Effect>
-                    <DropShadowEffect BlurRadius="10" ShadowDepth="3" Color="#000000" Opacity="0.1" Direction="270"/>
+                    <DropShadowEffect BlurRadius="10" ShadowDepth="3" Color="{DynamicResource AppPopupShadowColor}" Opacity="0.1" Direction="270"/>
                 </Border.Effect>
                 <StackPanel>
-                    <Border Background="#F8F9FA" CornerRadius="8,8,0,0"
-                            Padding="10,5" BorderBrush="#EEE" BorderThickness="0,0,0,1">
+                    <Border Background="{DynamicResource AppSurfaceAltBrush}" CornerRadius="8,8,0,0"
+                            Padding="10,5" BorderBrush="{DynamicResource AppBorderSoftBrush}" BorderThickness="0,0,0,1">
                         <TextBlock x:Name="SuggestionHeader" Text="候補"
-                                   FontSize="10" Foreground="#9AA0A6" FontWeight="SemiBold"/>
+                                   FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" FontWeight="SemiBold"/>
                     </Border>
                     <ListBox x:Name="SuggestionsListBox" MaxHeight="180" BorderThickness="0"
                              Background="Transparent" PreviewMouseDown="OnSuggestionClicked">
@@ -894,7 +1161,7 @@
                                             </Border>
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="B" Property="Background" Value="#EEF2FF"/>
+                                                    <Setter TargetName="B" Property="Background" Value="{DynamicResource AppAccentSubtleBrush}"/>
                                                 </Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
@@ -905,9 +1172,9 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:SuggestionItem}">
                                 <StackPanel>
-                                    <TextBlock Text="{Binding Value}" FontSize="12"/>
+                                    <TextBlock Text="{Binding Value}" FontSize="12" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
                                     <TextBlock Text="{Binding Source, StringFormat='  ← {0}'}"
-                                               FontSize="9" Foreground="#9AA0A6"/>
+                                               FontSize="9" Foreground="{DynamicResource AppTextMutedBrush}"/>
                                 </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
