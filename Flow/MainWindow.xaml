@@ -564,7 +564,7 @@
         </Border>
 
         <!-- ════ MAIN ════ -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="1" x:Name="MainContentGrid">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="48"/>
                 <ColumnDefinition Width="270" MinWidth="160" MaxWidth="400"/>
@@ -577,19 +577,27 @@
                 <StackPanel VerticalAlignment="Top" Margin="0,4,0,0">
                     <RadioButton Style="{StaticResource ActivityBtn}"
                                  Content="☰"
-                                 IsChecked="{Binding IsProjectListActive, Mode=TwoWay}"
+                                 IsChecked="{Binding IsProjectListActive, Mode=OneWay}"
+                                 Tag="ProjectList"
+                                 Click="OnActivityBarClick"
                                  ToolTip="プロジェクト"/>
                     <RadioButton Style="{StaticResource ActivityBtn}"
                                  Content="⚙"
-                                 IsChecked="{Binding IsProjectSettingsActive, Mode=TwoWay}"
+                                 IsChecked="{Binding IsProjectSettingsActive, Mode=OneWay}"
+                                 Tag="ProjectSettings"
+                                 Click="OnActivityBarClick"
                                  ToolTip="プロジェクト設定"/>
                     <RadioButton Style="{StaticResource ActivityBtn}"
                                  Content="✏"
-                                 IsChecked="{Binding IsTaskEditorActive, Mode=TwoWay}"
+                                 IsChecked="{Binding IsTaskEditorActive, Mode=OneWay}"
+                                 Tag="TaskEditor"
+                                 Click="OnActivityBarClick"
                                  ToolTip="タスク編集"/>
                     <RadioButton Style="{StaticResource ActivityBtn}"
                                  Content="☼"
-                                 IsChecked="{Binding IsAppSettingsActive, Mode=TwoWay}"
+                                 IsChecked="{Binding IsAppSettingsActive, Mode=OneWay}"
+                                 Tag="AppSettings"
+                                 Click="OnActivityBarClick"
                                  ToolTip="アプリ設定"/>
                 </StackPanel>
             </Border>
@@ -1167,8 +1175,10 @@
 
             </Grid>
 
-            <GridSplitter Grid.Column="2" Width="5" HorizontalAlignment="Stretch"
-                          Background="{DynamicResource AppBorderBrush}" Cursor="SizeWE"/>
+            <GridSplitter x:Name="SidebarSplitter"
+                          Grid.Column="2" Width="5" HorizontalAlignment="Stretch"
+                          Background="{DynamicResource AppBorderBrush}" Cursor="SizeWE"
+                          DragCompleted="OnSidebarSplitterDragCompleted"/>
 
             <!-- ── RIGHT: Gantt canvas ── -->
             <controls:GanttCanvas Grid.Column="3"

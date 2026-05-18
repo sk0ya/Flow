@@ -114,36 +114,45 @@ public partial class MainViewModel : ObservableObject
     // ── Sidebar panel ─────────────────────────────────────────────────────
 
     private SidebarPanel _activeSidebarPanel = SidebarPanel.ProjectList;
+    private bool _isSidebarOpen = true;
 
-    public bool IsProjectListActive
+    public bool IsSidebarOpen
     {
-        get => _activeSidebarPanel == SidebarPanel.ProjectList;
-        set { if (value) SetActivePanel(SidebarPanel.ProjectList); }
+        get => _isSidebarOpen;
+        private set { if (_isSidebarOpen == value) return; _isSidebarOpen = value; OnPropertyChanged(); }
     }
 
-    public bool IsProjectSettingsActive
-    {
-        get => _activeSidebarPanel == SidebarPanel.ProjectSettings;
-        set { if (value) SetActivePanel(SidebarPanel.ProjectSettings); }
-    }
+    public bool IsProjectListActive    => _activeSidebarPanel == SidebarPanel.ProjectList;
+    public bool IsProjectSettingsActive => _activeSidebarPanel == SidebarPanel.ProjectSettings;
+    public bool IsTaskEditorActive     => _activeSidebarPanel == SidebarPanel.TaskEditor;
+    public bool IsAppSettingsActive    => _activeSidebarPanel == SidebarPanel.AppSettings;
 
-    public bool IsTaskEditorActive
+    public void ToggleOrActivatePanel(SidebarPanel panel)
     {
-        get => _activeSidebarPanel == SidebarPanel.TaskEditor;
-        set { if (value) SetActivePanel(SidebarPanel.TaskEditor); }
-    }
-
-    public bool IsAppSettingsActive
-    {
-        get => _activeSidebarPanel == SidebarPanel.AppSettings;
-        set { if (value) SetActivePanel(SidebarPanel.AppSettings); }
+        if (_activeSidebarPanel == panel)
+        {
+            IsSidebarOpen = !_isSidebarOpen;
+        }
+        else
+        {
+            _activeSidebarPanel = panel;
+            IsSidebarOpen = true;
+            if (panel == SidebarPanel.ProjectList) SyncSelectedRecentProject();
+            NotifyPanelProperties();
+        }
     }
 
     private void SetActivePanel(SidebarPanel panel)
     {
         _activeSidebarPanel = panel;
+        IsSidebarOpen = true;
         if (panel == SidebarPanel.ProjectList)
             SyncSelectedRecentProject();
+        NotifyPanelProperties();
+    }
+
+    private void NotifyPanelProperties()
+    {
         OnPropertyChanged(nameof(IsProjectListActive));
         OnPropertyChanged(nameof(IsProjectSettingsActive));
         OnPropertyChanged(nameof(IsTaskEditorActive));
@@ -523,6 +532,8 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    public event EventHandler? ProjectLoaded;
+
     private void ApplyProject(SequenceProject project, string filePath)
     {
         RunWithoutAutoSave(() =>
@@ -569,6 +580,7 @@ public partial class MainViewModel : ObservableObject
             SetActivePanel(SidebarPanel.ProjectList);
             Analyze();
         });
+        ProjectLoaded?.Invoke(this, EventArgs.Empty);
     }
 
     private void TryRestoreStartupProject(string? startupProjectPath)

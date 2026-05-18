@@ -13,6 +13,7 @@ public partial class MainWindow : Window
     private TextBox? _activeCondBox;
     private bool     _isPre;
     private bool     _suppressPopup;
+    private double   _savedSidebarWidth = 270.0;
 
     public MainWindow() : this(null)
     {
@@ -27,6 +28,64 @@ public partial class MainWindow : Window
         GanttView.AddItemAtFunc        = vm.AddNewItemAt;
         GanttView.DiscardItemFunc      = vm.DiscardNewItem;
         GanttView.ReorderLanesCallback = vm.ReorderLane;
+
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.IsSidebarOpen))
+                UpdateSidebarColumns(vm);
+        };
+        vm.ProjectLoaded += (_, _) => GanttView.RequestAutoFitLaneHeader();
+    }
+
+    private void UpdateSidebarColumns(MainViewModel vm)
+    {
+        var sidebarCol  = MainContentGrid.ColumnDefinitions[1];
+        var splitterCol = MainContentGrid.ColumnDefinitions[2];
+
+        if (vm.IsSidebarOpen)
+        {
+            // Restore MinWidth before setting Width to avoid Min > Max conflict
+            sidebarCol.MinWidth = 160;
+            sidebarCol.Width    = new GridLength(Math.Clamp(_savedSidebarWidth, 160, 400));
+            splitterCol.Width   = new GridLength(5);
+        }
+        else
+        {
+            // Capture current pixel width; Width.Value is reliable after layout
+            double w = sidebarCol.Width.IsAbsolute
+                ? sidebarCol.Width.Value
+                : sidebarCol.ActualWidth;
+            if (w >= 160)
+                _savedSidebarWidth = w;
+
+            sidebarCol.MinWidth = 0;
+            sidebarCol.Width    = new GridLength(0);
+            splitterCol.Width   = new GridLength(0);
+        }
+    }
+
+    private void OnSidebarSplitterDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        // Keep _savedSidebarWidth in sync whenever the user resizes the sidebar
+        var col = MainContentGrid.ColumnDefinitions[1];
+        if (col.ActualWidth >= 160)
+            _savedSidebarWidth = col.ActualWidth;
+    }
+
+    private void OnActivityBarClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm || sender is not RadioButton rb) return;
+
+        var panel = rb.Tag?.ToString() switch
+        {
+            "ProjectList"     => SidebarPanel.ProjectList,
+            "ProjectSettings" => SidebarPanel.ProjectSettings,
+            "TaskEditor"      => SidebarPanel.TaskEditor,
+            "AppSettings"     => SidebarPanel.AppSettings,
+            _                 => SidebarPanel.ProjectList,
+        };
+
+        vm.ToggleOrActivatePanel(panel);
     }
 
     private void OnMinimizeWindow(object sender, RoutedEventArgs e) =>

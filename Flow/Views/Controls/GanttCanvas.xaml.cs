@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -69,7 +71,9 @@ public partial class GanttCanvas : UserControl
     { get => (IEnumerable<CategoryViewModel>?)GetValue(CategoriesProperty); set => SetValue(CategoriesProperty, value); }
 
     // ── Layout constants ──────────────────────────────────────────────────
-    private const double LaneHeaderW  = 150;
+    private double _laneHeaderW  = 150;
+    private double LaneHeaderW   => _laneHeaderW;
+    private bool   _needsAutoFit = true;
     private const double LaneH        = 36;
     private const double BarH         = 28;
     private const double TimeHeaderH  = 30;
@@ -143,6 +147,7 @@ public partial class GanttCanvas : UserControl
         Loaded                             += OnLoaded;
         Unloaded                           += OnUnloaded;
         SizeChanged                        += (_, _) => RenderFrozenLayers();
+        FrozenLaneCanvas.SizeChanged       += OnFrozenLaneCanvasSizeChanged;
     }
 
     // ── Collection subscription ───────────────────────────────────────────
@@ -152,10 +157,15 @@ public partial class GanttCanvas : UserControl
         var ctrl = (GanttCanvas)d;
         if (e.OldValue is INotifyCollectionChanged old) old.CollectionChanged -= ctrl.OnColl;
         if (e.NewValue is INotifyCollectionChanged nw)  nw.CollectionChanged  += ctrl.OnColl;
+        if (e.Property == LanesProperty) ctrl._needsAutoFit = true;
         ctrl.Render();
     }
 
-    private void OnColl(object? s, NotifyCollectionChangedEventArgs e) => Render();
+    private void OnColl(object? s, NotifyCollectionChangedEventArgs e)
+    {
+        if (ReferenceEquals(s, Lanes)) _needsAutoFit = true;
+        Render();
+    }
 
     private void OnTimelineScrollChanged(object sender, ScrollChangedEventArgs e)
     {
@@ -174,6 +184,52 @@ public partial class GanttCanvas : UserControl
     }
 
     private void OnThemeChanged(object? sender, EventArgs e) => Render();
+
+    public void RequestAutoFitLaneHeader()
+    {
+        _needsAutoFit = true;
+        Render();
+    }
+
+    private void OnFrozenLaneCanvasSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        double w = e.NewSize.Width;
+        if (w > 1 && Math.Abs(w - _laneHeaderW) > 0.5)
+        {
+            _laneHeaderW = w;
+            RenderFrozenLaneHeader();
+        }
+    }
+
+    private void OnLaneSplitterDragCompleted(object sender, DragCompletedEventArgs e)
+    {
+        // User has manually resized — disable auto-fit until lanes change again
+        _needsAutoFit = false;
+    }
+
+    private double CalcAutoFitLaneWidth()
+    {
+        var lanes = Lanes?.ToList() ?? new List<LaneViewModel>();
+        if (lanes.Count == 0) return 120.0;
+
+        var typeface = new Typeface(new FontFamily("Segoe UI"),
+            FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+        double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        double maxTextW = 0;
+
+        foreach (var lane in lanes)
+        {
+            var ft = new FormattedText(
+                lane.Name,
+                CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                typeface, 12, Brushes.Black, dpi);
+            maxTextW = Math.Max(maxTextW, ft.Width);
+        }
+
+        // drag-handle(20) + text + right-margin(14)
+        return Math.Clamp(maxTextW + 34, 80, 500);
+    }
 
     private void AttachWindowHook()
     {
@@ -227,6 +283,17 @@ public partial class GanttCanvas : UserControl
     public void Render()
     {
         if (IsRenaming) return;
+
+        if (IsLoaded && _needsAutoFit)
+        {
+            double fw = CalcAutoFitLaneWidth();
+            if (Math.Abs(fw - _laneHeaderW) > 1.0)
+            {
+                GanttLayoutGrid.ColumnDefinitions[0].Width = new GridLength(fw);
+                _laneHeaderW = fw;
+            }
+            _needsAutoFit = false;
+        }
 
         var palette = ThemeService.CurrentPalette;
         Brush surface = palette.Surface;
@@ -390,6 +457,10 @@ public partial class GanttCanvas : UserControl
         var palette = ThemeService.CurrentPalette;
 
         FrozenLaneCanvas.Children.Clear();
+
+        // Sync with actual column width set by GridSplitter
+        double colW = GanttLayoutGrid.ColumnDefinitions[0].ActualWidth;
+        if (colW > 1) _laneHeaderW = colW;
 
         double viewportH = GetLaneViewportHeight();
         if (viewportH <= 0) return;
