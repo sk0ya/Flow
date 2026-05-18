@@ -90,6 +90,10 @@ public partial class GanttCanvas : UserControl
     private int _reorderSourceLane = -1;
     private int _reorderDropLane   = -1;
 
+    // Resize drag state: original positions and touching chain
+    private Dictionary<Guid, double> _dragLaneOriginalStarts = new();
+    private List<ItemViewModel> _dragTouchingChain = new();
+
     // Lane rename state
     private LaneViewModel? _renamingLane;
     private TextBox?       _renameBox;
@@ -302,7 +306,11 @@ public partial class GanttCanvas : UserControl
         if (_drag == DragMode.Move && _dragItem != null)
             DrawDragGhost(_dragItem, ppu);
 
-        // 11. Add-lane zone
+        // 11. Drag info label (duration + end time above right edge)
+        if ((_drag == DragMode.Move || _drag == DragMode.Resize) && _dragItem != null)
+            DrawDragInfoLabel(_dragItem, pps);
+
+        // 12. Add-lane zone
         DrawAddLaneZone(totalW);
 
         RootCanvas.Width  = totalW;
@@ -540,6 +548,52 @@ public partial class GanttCanvas : UserControl
             BorderBrush = palette.Accent,
             BorderThickness = new Thickness(2),
         }, ghostX, ghostY);
+    }
+
+    private void DrawDragInfoLabel(ItemViewModel item, double pps)
+    {
+        double endTime = item.StartTime + item.Duration;
+        double endX    = endTime * pps;
+
+        double barY;
+        if (_dragToNewLane)
+            barY = _dragLaneIdx * LaneH + (LaneH - BarH) / 2.0;
+        else if (_barRects.TryGetValue(item.Id, out var r))
+            barY = r.Top;
+        else
+            return;
+
+        var palette = ThemeService.CurrentPalette;
+
+        var sp = new StackPanel();
+        sp.Children.Add(new TextBlock
+        {
+            Text       = $"所要  {HmsConverter.Format(item.Duration)}",
+            FontSize   = 10,
+            Foreground = palette.TextSecondary,
+        });
+        sp.Children.Add(new TextBlock
+        {
+            Text       = $"完了  {HmsConverter.Format(endTime)}",
+            FontSize   = 10,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = palette.TextPrimary,
+        });
+
+        var label = new Border
+        {
+            Background      = palette.Surface,
+            BorderBrush     = palette.Accent,
+            BorderThickness = new Thickness(1),
+            CornerRadius    = new CornerRadius(4),
+            Padding         = new Thickness(6, 3, 6, 3),
+            Child           = sp,
+        };
+        Panel.SetZIndex(label, int.MaxValue);
+
+        const double labelW = 108;
+        const double labelH = 38;
+        Add(label, Math.Max(0, endX - labelW / 2), Math.Max(0, barY - labelH - 6));
     }
 
     private void DrawAddLaneZone(double totalW)
@@ -900,6 +954,32 @@ public partial class GanttCanvas : UserControl
         return new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255));
     }
 
+    // ── Successor push (resize cascade) ──────────────────────────────────
+
+    private void PushSuccessors(ItemViewModel anchor, ISet<Guid>? skip = null)
+    {
+        var successors = ItemsSource?
+            .Where(i => i.Id != anchor.Id && i.LaneId == anchor.LaneId &&
+                        i.StartTime >= anchor.StartTime - 1e-9 &&
+                        (skip == null || !skip.Contains(i.Id)))
+            .OrderBy(i => i.StartTime)
+            .ToList() ?? new List<ItemViewModel>();
+
+        double pushFront = anchor.StartTime + anchor.Duration;
+        foreach (var task in successors)
+        {
+            if (task.StartTime < pushFront - 1e-9)
+            {
+                task.StartTime = NormalizeTimelineValue(pushFront);
+                pushFront = task.StartTime + task.Duration;
+            }
+            else
+            {
+                break;
+            }
+        }
+    }
+
     // ── Collision avoidance ───────────────────────────────────────────────
 
     private double FindValidStart(ItemViewModel item, double proposedStart, Guid targetLaneId)
@@ -1022,6 +1102,28 @@ public partial class GanttCanvas : UserControl
         if (_barRects.TryGetValue(item.Id, out r) && pos.X >= r.Right - ResizeW)
         {
             _drag = DragMode.Resize;
+            double itemEnd = item.StartTime + item.Duration;
+            _dragLaneOriginalStarts = ItemsSource?
+                .Where(i => i.LaneId == item.LaneId && i.Id != item.Id &&
+                            i.StartTime >= itemEnd - 1e-9)
+                .ToDictionary(i => i.Id, i => i.StartTime)
+                ?? new Dictionary<Guid, double>();
+
+            // Compute which successive tasks are flush against the anchor (touching chain)
+            _dragTouchingChain = new List<ItemViewModel>();
+            double chainFront = itemEnd;
+            foreach (var t in (ItemsSource ?? Enumerable.Empty<ItemViewModel>())
+                         .Where(i => i.LaneId == item.LaneId && i.Id != item.Id &&
+                                     i.StartTime >= itemEnd - 1e-9)
+                         .OrderBy(i => i.StartTime))
+            {
+                if (t.StartTime > chainFront + 1e-9) break;
+                if (Math.Abs(t.StartTime - chainFront) < 1e-9)
+                {
+                    _dragTouchingChain.Add(t);
+                    chainFront = t.StartTime + t.Duration;
+                }
+            }
         }
         else
         {
@@ -1071,9 +1173,29 @@ public partial class GanttCanvas : UserControl
         }
         else if (_drag == DragMode.Resize)
         {
+            // Restore lane to original positions before recomputing each frame
+            if (ItemsSource != null)
+                foreach (var i in ItemsSource)
+                    if (_dragLaneOriginalStarts.TryGetValue(i.Id, out var orig))
+                        i.StartTime = orig;
+
             double rawEnd = NormalizeTimelineValue(pos.X / pps);
             double rawDur = rawEnd - _dragItem.StartTime;
-            _dragItem.Duration = FindValidDuration(_dragItem, rawDur);
+            double minDuration = Math.Min(GetGridStepInSeconds(), 1.0);
+            _dragItem.Duration = Math.Max(minDuration, NormalizeTimelineValue(rawDur));
+
+            // Move touching chain items together (follows anchor both when growing and shrinking)
+            double front = _dragItem.StartTime + _dragItem.Duration;
+            foreach (var t in _dragTouchingChain)
+            {
+                t.StartTime = NormalizeTimelineValue(front);
+                front = t.StartTime + t.Duration;
+            }
+
+            // Push non-chain items that became overlapped (only when growing closes a gap)
+            var chainIds = new HashSet<Guid>(_dragTouchingChain.Select(t => t.Id)) { _dragItem.Id };
+            var lastAnchor = _dragTouchingChain.Count > 0 ? _dragTouchingChain[^1] : _dragItem;
+            PushSuccessors(lastAnchor, chainIds);
         }
 
         Render();
@@ -1168,6 +1290,8 @@ public partial class GanttCanvas : UserControl
         _dragToNewLane = false;
         _drag = DragMode.None;
         _dragItem = null;
+        _dragLaneOriginalStarts.Clear();
+        _dragTouchingChain.Clear();
 
         if (RootCanvas.IsMouseCaptured) RootCanvas.ReleaseMouseCapture();
         if (FrozenLaneCanvas.IsMouseCaptured) FrozenLaneCanvas.ReleaseMouseCapture();
