@@ -9,6 +9,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using System.Windows.Shapes;
+using Flow.Converters;
 using Flow.Services;
 using Flow.ViewModels;
 
@@ -274,15 +275,16 @@ public partial class GanttCanvas : UserControl
             Add(new Rectangle { Width = totalW, Height = 2, Fill = dropLine }, 0, _reorderDropLane * LaneH - 1);
 
         // 7. Compute bar rects
+        double pps = GetPixelsPerSecond();
         var laneIndexMap = lanes.Select((lane, idx) => (lane.Id, idx)).ToDictionary(x => x.Id, x => x.idx);
         var itemMap = items.ToDictionary(i => i.Id);
 
         foreach (var item in items)
         {
             int li = laneIndexMap.TryGetValue(item.LaneId, out var idx) ? idx : 0;
-            double bx = item.StartTime * ppu;
+            double bx = item.StartTime * pps;
             double by = li * LaneH + (LaneH - BarH) / 2.0;
-            double bw = Math.Max(item.Duration * ppu, MinBarW);
+            double bw = Math.Max(item.Duration * pps, MinBarW);
             _barRects[item.Id] = new Rect(bx, by, bw, BarH);
         }
 
@@ -523,8 +525,9 @@ public partial class GanttCanvas : UserControl
 
     private void DrawDragGhost(ItemViewModel item, double ppu)
     {
-        double ghostX = item.StartTime * ppu;
-        double ghostW = Math.Max(item.Duration * ppu, MinBarW);
+        double pps = GetPixelsPerSecond();
+        double ghostX = item.StartTime * pps;
+        double ghostW = Math.Max(item.Duration * pps, MinBarW);
         double ghostY = _dragLaneIdx * LaneH + (LaneH - BarH) / 2.0;
         var palette = ThemeService.CurrentPalette;
 
@@ -949,7 +952,7 @@ public partial class GanttCanvas : UserControl
             .OrderBy(i => i.StartTime)
             .FirstOrDefault();
 
-        double minDuration = GetGridStep();
+        double minDuration = GetGridStepInSeconds();
         double maxDur = next != null ? next.StartTime - item.StartTime : double.MaxValue;
         return NormalizeTimelineValue(Math.Clamp(proposedDuration, minDuration, Math.Max(minDuration, maxDur)));
     }
@@ -992,7 +995,7 @@ public partial class GanttCanvas : UserControl
         {
             _drag = DragMode.Move;
             _dragMouseOffsetX = _barRects.TryGetValue(item.Id, out var barRect)
-                ? (pos.X - barRect.Left) / GetPixelsPerTimeUnit()
+                ? (pos.X - barRect.Left) / GetPixelsPerSecond()
                 : 0;
         }
 
@@ -1008,14 +1011,14 @@ public partial class GanttCanvas : UserControl
         if (_drag == DragMode.None) return;
         if (_dragItem == null) return;
 
-        double ppu = GetPixelsPerTimeUnit();
+        double pps = GetPixelsPerSecond();
 
         if (_drag == DragMode.Move)
         {
             var lanes = Lanes?.ToList() ?? new List<LaneViewModel>();
             if (lanes.Count == 0) return;
 
-            double rawStart = SnapToGrid(pos.X / ppu - _dragMouseOffsetX);
+            double rawStart = SnapToSeconds(pos.X / pps - _dragMouseOffsetX);
             int rawLi = GetLaneIndex(pos.Y);
 
             if (rawLi >= lanes.Count && AddLaneFunc != null)
@@ -1036,7 +1039,7 @@ public partial class GanttCanvas : UserControl
         }
         else if (_drag == DragMode.Resize)
         {
-            double rawEnd = SnapToGrid(pos.X / ppu);
+            double rawEnd = SnapToSeconds(pos.X / pps);
             double rawDur = rawEnd - _dragItem.StartTime;
             _dragItem.Duration = FindValidDuration(_dragItem, rawDur);
         }
@@ -1184,7 +1187,7 @@ public partial class GanttCanvas : UserControl
             return;
         }
 
-        double startTime = SnapToGrid(Math.Max(0, pos.X / GetPixelsPerTimeUnit()));
+        double startTime = SnapToSeconds(Math.Max(0, pos.X / GetPixelsPerSecond()));
         var item = AddItemAtFunc(lanes[laneIdx].Id, startTime);
         if (item != null)
         {
@@ -1242,7 +1245,24 @@ public partial class GanttCanvas : UserControl
 
     private double GetPixelsPerTimeUnit() => PixelsPerUnit / GetGridStep();
 
-    private double SnapToGrid(double value) => NormalizeTimelineValue(Snap(value, GetGridStep()));
+    private double GetSecondsPerUnit() => TimeUnit switch
+    {
+        "秒" => 1,
+        "分" => 60,
+        "時間" => 3600,
+        "日" => 86400,
+        "週" => 604800,
+        "スプリント" => 1209600,
+        _ => 1,
+    };
+
+    // pixels per second: positions task bars from absolute seconds
+    private double GetPixelsPerSecond() => GetPixelsPerTimeUnit() / GetSecondsPerUnit();
+
+    // grid step expressed in seconds
+    private double GetGridStepInSeconds() => GetGridStep() * GetSecondsPerUnit();
+
+    private double SnapToSeconds(double seconds) => NormalizeTimelineValue(Snap(seconds, GetGridStepInSeconds()));
 
     private static double Snap(double value, double snap) =>
         snap <= 0 ? value : Math.Round(value / snap) * snap;
@@ -1321,7 +1341,7 @@ public partial class GanttCanvas : UserControl
         });
         sp.Children.Add(new TextBlock
         {
-            Text = $"開始: {FormatTimelineValue(item.StartTime)} {TimeUnit}  ／  所要: {FormatTimelineValue(item.Duration)} {TimeUnit}  ／  終了: {FormatTimelineValue(item.StartTime + item.Duration)} {TimeUnit}",
+            Text = $"開始: {HmsConverter.Format(item.StartTime)}  ／  所要: {HmsConverter.Format(item.Duration)}  ／  終了: {HmsConverter.Format(item.StartTime + item.Duration)}",
             FontSize = 10,
             Foreground = palette.TextSecondary,
             Margin = new Thickness(0, 2, 0, 0),

@@ -746,7 +746,7 @@ public partial class MainViewModel : ObservableObject
         return Math.Round(start, 10, MidpointRounding.AwayFromZero);
     }
 
-    private double GetDefaultItemDuration() => NormalizeCellDuration(CellDuration);
+    private double GetDefaultItemDuration() => NormalizeCellDuration(CellDuration) * GetSecondsPerUnit();
 
     // Find the nearest valid StartTime in targetLaneId that fits vm without overlap.
     // Called when lane changes via the editor dropdown.
@@ -1026,6 +1026,17 @@ public partial class MainViewModel : ObservableObject
 
         return Math.Max(value, 0.0001);
     }
+
+    private double GetSecondsPerUnit() => TimeUnit switch
+    {
+        "秒" => 1,
+        "分" => 60,
+        "時間" => 3600,
+        "日" => 86400,
+        "週" => 604800,
+        "スプリント" => 1209600,
+        _ => 1,
+    };
 
     private static bool TryGetSmallerUnit(string timeUnit, out string smallerUnit, out double scale)
     {

@@ -4,6 +4,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:vm="clr-namespace:Flow.ViewModels"
         xmlns:controls="clr-namespace:Flow.Views.Controls"
+        xmlns:conv="clr-namespace:Flow.Converters"
         Title="Flow"
         Icon="Assets/Flow.ico"
         Height="740" Width="1280"
@@ -27,6 +28,7 @@
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolVis"/>
+        <conv:HmsConverter x:Key="HmsConv"/>
 
         <Style x:Key="FlatBtn" TargetType="Button">
             <Setter Property="Padding" Value="11,5"/>
@@ -514,9 +516,8 @@
                     <Border Background="{DynamicResource AppAccentSubtleBrush}" CornerRadius="8" Padding="10,4" Margin="0,0,8,0">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="プロジェクト期間  " FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}" VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding ProjectDuration, StringFormat={}{0:0.####}}"
+                            <TextBlock Text="{Binding ProjectDuration, Converter={StaticResource HmsConv}}"
                                        FontSize="14" FontWeight="Bold" Foreground="{DynamicResource AppAccentBrush}" VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding TimeUnit}" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}" VerticalAlignment="Center" Margin="2,0,0,0"/>
                         </StackPanel>
                     </Border>
                     <Border Background="{DynamicResource AppDangerSurfaceBrush}" CornerRadius="8" Padding="10,4">
@@ -967,13 +968,13 @@
                                     <TextBlock Text="開始" FontSize="10" FontWeight="SemiBold"
                                                Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,0,0,4"/>
                                     <TextBox Style="{StaticResource InputBox}" FontSize="12"
-                                             Text="{Binding StartTime, StringFormat={}{0:0.####}, UpdateSourceTrigger=PropertyChanged}"/>
+                                             Text="{Binding StartTime, Converter={StaticResource HmsConv}, UpdateSourceTrigger=LostFocus}"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Text="所要時間" FontSize="10" FontWeight="SemiBold"
                                                Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,0,0,4"/>
                                     <TextBox Style="{StaticResource InputBox}" FontSize="12"
-                                             Text="{Binding Duration, StringFormat={}{0:0.####}, UpdateSourceTrigger=PropertyChanged}"/>
+                                             Text="{Binding Duration, Converter={StaticResource HmsConv}, UpdateSourceTrigger=LostFocus}"/>
                                 </StackPanel>
                             </Grid>
 
