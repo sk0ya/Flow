@@ -952,7 +952,7 @@ public partial class GanttCanvas : UserControl
             .OrderBy(i => i.StartTime)
             .FirstOrDefault();
 
-        double minDuration = GetGridStepInSeconds();
+        double minDuration = Math.Min(GetGridStepInSeconds(), 1.0);
         double maxDur = next != null ? next.StartTime - item.StartTime : double.MaxValue;
         return NormalizeTimelineValue(Math.Clamp(proposedDuration, minDuration, Math.Max(minDuration, maxDur)));
     }
@@ -1039,7 +1039,7 @@ public partial class GanttCanvas : UserControl
         }
         else if (_drag == DragMode.Resize)
         {
-            double rawEnd = SnapToSeconds(pos.X / pps);
+            double rawEnd = NormalizeTimelineValue(pos.X / pps);
             double rawDur = rawEnd - _dragItem.StartTime;
             _dragItem.Duration = FindValidDuration(_dragItem, rawDur);
         }
