@@ -129,6 +129,8 @@ public partial class GanttCanvas : UserControl
         RootCanvas.MouseMove                  += OnMouseMove;
         RootCanvas.MouseLeftButtonUp          += OnMouseUp;
 
+        RootCanvas.MouseRightButtonDown += OnRightClick;
+
         FrozenLaneCanvas.PreviewMouseLeftButtonDown += OnFrozenLaneMouseDown;
         FrozenLaneCanvas.MouseMove                  += OnFrozenLaneMouseMove;
         FrozenLaneCanvas.MouseLeftButtonUp          += OnFrozenLaneMouseUp;
@@ -1371,6 +1373,151 @@ public partial class GanttCanvas : UserControl
         }
 
         e.Handled = true;
+    }
+
+    // ── Right-click context menu ──────────────────────────────────────────
+
+    private void OnRightClick(object sender, MouseButtonEventArgs e)
+    {
+        if (IsRenaming || _drag != DragMode.None) return;
+
+        var pos = e.GetPosition(RootCanvas);
+        var item = HitTestItem(pos);
+        if (item == null) return;
+
+        SelectedItem = item;
+
+        var menu = BuildBarContextMenu(item);
+        menu.PlacementTarget = RootCanvas;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+        menu.IsOpen = true;
+
+        e.Handled = true;
+    }
+
+    private ContextMenu BuildBarContextMenu(ItemViewModel item)
+    {
+        var palette = ThemeService.CurrentPalette;
+        var menu = new ContextMenu();
+
+        // ── Category ─────────────────────────────────────────────────────
+        menu.Items.Add(MakeMenuLabel("カテゴリ", palette));
+
+        var allCategories = Enumerable.Repeat(CategoryViewModel.None, 1)
+            .Concat(Categories ?? Enumerable.Empty<CategoryViewModel>());
+
+        foreach (var cat in allCategories)
+        {
+            var catCapture = cat;
+            bool isSelected = cat.IsNone ? item.CategoryId == Guid.Empty : item.CategoryId == cat.Id;
+
+            var dot = new Border
+            {
+                Width = 12, Height = 12, CornerRadius = new CornerRadius(6),
+                Margin = new Thickness(0, 0, 7, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Background = cat.IsNone ? Brushes.Transparent : cat.Brush,
+                BorderBrush = cat.IsNone ? palette.Border : Brushes.Transparent,
+                BorderThickness = new Thickness(cat.IsNone ? 1 : 0),
+            };
+            var sp = new StackPanel { Orientation = Orientation.Horizontal };
+            sp.Children.Add(dot);
+            sp.Children.Add(new TextBlock { Text = cat.Name, VerticalAlignment = VerticalAlignment.Center });
+
+            var mi = new MenuItem { Header = sp };
+            if (isSelected)
+                mi.Icon = new TextBlock { Text = "✓", FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
+            mi.Click += (_, _) => item.CategoryId = catCapture.IsNone ? Guid.Empty : catCapture.Id;
+            menu.Items.Add(mi);
+        }
+
+        menu.Items.Add(new Separator());
+
+        // ── Pre-conditions ────────────────────────────────────────────────
+        menu.Items.Add(MakeMenuLabel("前提条件", palette));
+        foreach (var cond in item.PreConditions.ToList())
+        {
+            var c = cond;
+            var mi = new MenuItem
+            {
+                Header = c.Value,
+                Icon = new TextBlock { Text = "×", Foreground = palette.Danger, VerticalAlignment = VerticalAlignment.Center },
+            };
+            mi.Click += (_, _) => item.PreConditions.Remove(c);
+            menu.Items.Add(mi);
+        }
+        menu.Items.Add(MakeAddConditionItem(menu, palette, val => item.PreConditions.Add(new ConditionEntry(val))));
+
+        menu.Items.Add(new Separator());
+
+        // ── Post-conditions ───────────────────────────────────────────────
+        menu.Items.Add(MakeMenuLabel("事後条件", palette));
+        foreach (var cond in item.PostConditions.ToList())
+        {
+            var c = cond;
+            var mi = new MenuItem
+            {
+                Header = c.Value,
+                Icon = new TextBlock { Text = "×", Foreground = palette.Danger, VerticalAlignment = VerticalAlignment.Center },
+            };
+            mi.Click += (_, _) => item.PostConditions.Remove(c);
+            menu.Items.Add(mi);
+        }
+        menu.Items.Add(MakeAddConditionItem(menu, palette, val => item.PostConditions.Add(new ConditionEntry(val))));
+
+        return menu;
+    }
+
+    private static MenuItem MakeMenuLabel(string text, ThemePalette palette) => new()
+    {
+        Header = text,
+        IsEnabled = false,
+        FontSize = 10,
+        Foreground = palette.TextSecondary,
+    };
+
+    private static MenuItem MakeAddConditionItem(ContextMenu menu, ThemePalette palette, Action<string> onAdd)
+    {
+        var tb = new TextBox
+        {
+            Width = 160,
+            Height = 22,
+            FontSize = 11,
+            Background = palette.Surface,
+            Foreground = palette.TextPrimary,
+            BorderBrush = palette.Border,
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(4, 2, 4, 2),
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        tb.PreviewKeyDown += (_, ke) =>
+        {
+            if (ke.Key == Key.Return)
+            {
+                var val = tb.Text.Trim();
+                if (!string.IsNullOrEmpty(val)) onAdd(val);
+                menu.IsOpen = false;
+                ke.Handled = true;
+            }
+            else if (ke.Key != Key.Tab)
+            {
+                ke.Handled = true;
+            }
+        };
+        tb.PreviewMouseDown += (_, me) => me.Handled = true;
+
+        var sp = new StackPanel { Orientation = Orientation.Horizontal };
+        sp.Children.Add(new TextBlock
+        {
+            Text = "＋ ",
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = palette.TextSecondary,
+        });
+        sp.Children.Add(tb);
+
+        var mi = new MenuItem { Header = sp, StaysOpenOnClick = true };
+        mi.Click += (_, _) => tb.Focus();
+        return mi;
     }
 
     // ── Hit testing ───────────────────────────────────────────────────────
