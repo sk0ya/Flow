@@ -50,6 +50,12 @@ public partial class GanttCanvas : UserControl
     public static readonly DependencyProperty CategoriesProperty =
         DependencyProperty.Register(nameof(Categories), typeof(IEnumerable<CategoryViewModel>),
             typeof(GanttCanvas), new PropertyMetadata(null, OnAnyChanged));
+    public static readonly DependencyProperty CursorLaneIndexProperty =
+        DependencyProperty.Register(nameof(CursorLaneIndex), typeof(int),
+            typeof(GanttCanvas), new PropertyMetadata(0, (d, _) => ((GanttCanvas)d).Render()));
+    public static readonly DependencyProperty CursorTimeProperty =
+        DependencyProperty.Register(nameof(CursorTime), typeof(double),
+            typeof(GanttCanvas), new PropertyMetadata(0.0, (d, _) => ((GanttCanvas)d).Render()));
 
     public IEnumerable<ItemViewModel>? ItemsSource
     { get => (IEnumerable<ItemViewModel>?)GetValue(ItemsSourceProperty); set => SetValue(ItemsSourceProperty, value); }
@@ -69,6 +75,10 @@ public partial class GanttCanvas : UserControl
     { get => (double)GetValue(PixelsPerUnitProperty); set => SetValue(PixelsPerUnitProperty, value); }
     public IEnumerable<CategoryViewModel>? Categories
     { get => (IEnumerable<CategoryViewModel>?)GetValue(CategoriesProperty); set => SetValue(CategoriesProperty, value); }
+    public int    CursorLaneIndex
+    { get => (int)GetValue(CursorLaneIndexProperty);    set => SetValue(CursorLaneIndexProperty, value); }
+    public double CursorTime
+    { get => (double)GetValue(CursorTimeProperty);      set => SetValue(CursorTimeProperty, value); }
 
     // ── Layout constants ──────────────────────────────────────────────────
     private double _laneHeaderW  = 150;
@@ -326,6 +336,7 @@ public partial class GanttCanvas : UserControl
         if (lanes.Count == 0) lanes.Add(new LaneViewModel("レーン 1"));
 
         double ppu    = GetPixelsPerTimeUnit();
+        double pps    = GetPixelsPerSecond();
         double total  = Math.Max(TotalDuration, 1);
         int    nLanes = lanes.Count;
         double totalW = total * ppu + 20;
@@ -349,6 +360,22 @@ public partial class GanttCanvas : UserControl
                 }, 0, rowY);
         }
 
+        // 2.5. Cursor cell
+        if (_drag == DragMode.None && nLanes > 0)
+        {
+            int    cl    = Math.Clamp(CursorLaneIndex, 0, nLanes - 1);
+            double cellW = Math.Max(GetGridStepInSeconds() * pps, 2);
+            var accentColor = ((SolidColorBrush)palette.Accent).Color;
+            Add(new Border
+            {
+                Width           = cellW,
+                Height          = LaneH,
+                Background      = new SolidColorBrush(Color.FromArgb(18, accentColor.R, accentColor.G, accentColor.B)),
+                BorderBrush     = new SolidColorBrush(Color.FromArgb(120, accentColor.R, accentColor.G, accentColor.B)),
+                BorderThickness = new Thickness(1),
+            }, CursorTime * pps, cl * LaneH);
+        }
+
         // 3. Minor grid lines
         foreach (double t in EnumerateMinorTicks(total))
         {
@@ -368,7 +395,6 @@ public partial class GanttCanvas : UserControl
             Add(new Rectangle { Width = totalW, Height = 2, Fill = dropLine }, 0, _reorderDropLane * LaneH - 1);
 
         // 7. Compute bar rects
-        double pps = GetPixelsPerSecond();
         var laneIndexMap = lanes.Select((lane, idx) => (lane.Id, idx)).ToDictionary(x => x.Id, x => x.idx);
         var itemMap = items.ToDictionary(i => i.Id);
 
@@ -534,6 +560,16 @@ public partial class GanttCanvas : UserControl
                     Width = LaneHeaderW,
                     Height = LaneH,
                     Fill = CreateOverlayBrush(),
+                }, 0, rowY);
+            }
+
+            if (i == CursorLaneIndex && _drag == DragMode.None)
+            {
+                AddTo(FrozenLaneCanvas, new Rectangle
+                {
+                    Width  = 3,
+                    Height = LaneH,
+                    Fill   = palette.Accent,
                 }, 0, rowY);
             }
         }

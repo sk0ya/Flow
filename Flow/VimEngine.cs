@@ -37,6 +37,25 @@ public sealed class VimContext(MainViewModel viewModel, GanttCanvas ganttView, V
     public MainViewModel ViewModel { get; } = viewModel;
     public GanttCanvas   GanttView { get; } = ganttView;
     public VimClipboard  Clipboard { get; } = clipboard;
+
+    public double GridStep  => ViewModel.GridStepInSeconds;
+    public int    LaneCount => ViewModel.Lanes.Count;
+
+    public Guid CursorLaneId()
+        => ViewModel.Lanes.ElementAtOrDefault(ViewModel.CursorLaneIndex)?.Id ?? Guid.Empty;
+
+    public ItemViewModel? TaskAtCursor()
+    {
+        var laneId = CursorLaneId();
+        if (laneId == Guid.Empty) return null;
+        double t = ViewModel.CursorTime;
+        return ViewModel.Items.FirstOrDefault(i =>
+            i.LaneId == laneId &&
+            i.StartTime     <= t + 1e-9 &&
+            i.StartTime + i.Duration > t + 1e-9);
+    }
+
+    public void SyncSelection() => ViewModel.SetSelectionFromVim(TaskAtCursor());
 }
 
 /// Key-sequence Vim command engine.
@@ -115,6 +134,10 @@ public sealed class VimEngine
         Key.Y when !shift => "y",
         Key.D when !shift => "d",
         Key.W when !shift => "w",
+        Key.B when !shift => "b",
+        Key.E when !shift => "e",
+        Key.D0 when !shift => "0",
+        Key.D4 when  shift => "$",
         _ => null,
     };
 }

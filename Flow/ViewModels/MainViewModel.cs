@@ -47,6 +47,9 @@ public partial class MainViewModel : ObservableObject
         new("バイオレット", "#8B5CF6"),
     };
 
+    [ObservableProperty] private int    _cursorLaneIndex = 0;
+    [ObservableProperty] private double _cursorTime      = 0.0;
+
     [ObservableProperty] private string         _projectName = "新しいプロジェクト";
     [ObservableProperty] private string?        _currentFilePath;
     [ObservableProperty] private RecentProjectEntry? _selectedRecentProject;
@@ -66,6 +69,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool   _canUndoDelete;
     [ObservableProperty] private string _undoMessage = "";
     private ItemViewModel? _deletedItem;
+    private bool _suppressCursorSnap;
 
     [ObservableProperty] private string? _cellDurationError;
 
@@ -1187,6 +1191,27 @@ public partial class MainViewModel : ObservableObject
             return 1.0;
 
         return Math.Max(value, 0.0001);
+    }
+
+    public double GridStepInSeconds => Math.Max(CellDuration, 0.0001) * GetSecondsPerUnit();
+
+    public void SetSelectionFromVim(ItemViewModel? item)
+    {
+        _suppressCursorSnap = true;
+        SelectedItem = item;
+        _suppressCursorSnap = false;
+    }
+
+    partial void OnSelectedItemChanged(ItemViewModel? value)
+    {
+        if (_suppressCursorSnap || value == null) return;
+        for (int i = 0; i < Lanes.Count; i++)
+        {
+            if (Lanes[i].Id != value.LaneId) continue;
+            CursorLaneIndex = i;
+            CursorTime      = value.StartTime;
+            return;
+        }
     }
 
     private double GetSecondsPerUnit() => TimeUnit switch
