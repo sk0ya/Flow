@@ -574,32 +574,36 @@
 
             <!-- ── ACTIVITY BAR ── -->
             <Border Grid.Column="0" Background="{DynamicResource AppActivityBarBackgroundBrush}" BorderBrush="{DynamicResource AppActivityBarBorderBrush}" BorderThickness="0,0,1,0">
-                <StackPanel VerticalAlignment="Top" Margin="0,4,0,0">
-                    <RadioButton Style="{StaticResource ActivityBtn}"
-                                 Content="☰"
-                                 IsChecked="{Binding IsProjectListActive, Mode=OneWay}"
-                                 Tag="ProjectList"
-                                 Click="OnActivityBarClick"
-                                 ToolTip="プロジェクト"/>
-                    <RadioButton Style="{StaticResource ActivityBtn}"
-                                 Content="⚙"
-                                 IsChecked="{Binding IsProjectSettingsActive, Mode=OneWay}"
-                                 Tag="ProjectSettings"
-                                 Click="OnActivityBarClick"
-                                 ToolTip="プロジェクト設定"/>
-                    <RadioButton Style="{StaticResource ActivityBtn}"
-                                 Content="✏"
-                                 IsChecked="{Binding IsTaskEditorActive, Mode=OneWay}"
-                                 Tag="TaskEditor"
-                                 Click="OnActivityBarClick"
-                                 ToolTip="タスク編集"/>
-                    <RadioButton Style="{StaticResource ActivityBtn}"
-                                 Content="☼"
-                                 IsChecked="{Binding IsAppSettingsActive, Mode=OneWay}"
-                                 Tag="AppSettings"
-                                 Click="OnActivityBarClick"
-                                 ToolTip="アプリ設定"/>
-                </StackPanel>
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,0,0,4">
+                        <RadioButton Style="{StaticResource ActivityBtn}"
+                                     Content="☼"
+                                     IsChecked="{Binding IsAppSettingsActive, Mode=OneWay}"
+                                     Tag="AppSettings"
+                                     Click="OnActivityBarClick"
+                                     ToolTip="アプリ設定"/>
+                    </StackPanel>
+                    <StackPanel VerticalAlignment="Top" Margin="0,4,0,0">
+                        <RadioButton Style="{StaticResource ActivityBtn}"
+                                     Content="☰"
+                                     IsChecked="{Binding IsProjectListActive, Mode=OneWay}"
+                                     Tag="ProjectList"
+                                     Click="OnActivityBarClick"
+                                     ToolTip="プロジェクト"/>
+                        <RadioButton Style="{StaticResource ActivityBtn}"
+                                     Content="⚙"
+                                     IsChecked="{Binding IsProjectSettingsActive, Mode=OneWay}"
+                                     Tag="ProjectSettings"
+                                     Click="OnActivityBarClick"
+                                     ToolTip="プロジェクト設定"/>
+                        <RadioButton Style="{StaticResource ActivityBtn}"
+                                     Content="✏"
+                                     IsChecked="{Binding IsTaskEditorActive, Mode=OneWay}"
+                                     Tag="TaskEditor"
+                                     Click="OnActivityBarClick"
+                                     ToolTip="タスク編集"/>
+                    </StackPanel>
+                </DockPanel>
             </Border>
 
             <!-- ── SIDEBAR ── -->
