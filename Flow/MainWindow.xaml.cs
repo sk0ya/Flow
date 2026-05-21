@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -14,6 +15,10 @@ public partial class MainWindow : Window
     private bool     _isPre;
     private bool     _suppressPopup;
     private double   _savedSidebarWidth = 270.0;
+
+    // ── Vim state ─────────────────────────────────────────────────────────
+    private readonly VimEngine    _vim          = new();
+    private readonly VimClipboard _vimClipboard = new();
 
     public MainWindow() : this(null)
     {
@@ -35,6 +40,8 @@ public partial class MainWindow : Window
                 UpdateSidebarColumns(vm);
         };
         vm.ProjectLoaded += (_, _) => GanttView.RequestAutoFitLaneHeader();
+
+        InitVim();
     }
 
     private void UpdateSidebarColumns(MainViewModel vm)
@@ -245,6 +252,186 @@ public partial class MainWindow : Window
             if (DataContext is MainViewModel vm)
                 vm.SelectedItem = null;
         }
+
+        // Vim keybindings (skip when a text input has focus or inline editor is open)
+        if (!e.Handled && !IsTextInputFocused() && !GanttView.IsEditing)
+            HandleVimKey(e);
+    }
+
+    private static bool IsTextInputFocused() =>
+        Keyboard.FocusedElement is TextBox or PasswordBox;
+
+    private void InitVim()
+    {
+        _vim.Init();
+
+        _vim.Register("h",   ctx => VimNavigate(ctx,  0, -1));
+        _vim.Register("l",   ctx => VimNavigate(ctx,  0, +1));
+        _vim.Register("k",   ctx => VimNavigate(ctx, -1,  0));
+        _vim.Register("j",   ctx => VimNavigate(ctx, +1,  0));
+
+        _vim.Register("i",   ctx => { if (ctx.ViewModel.SelectedItem != null) ctx.GanttView.StartRenameSelectedItem(); });
+        _vim.Register("I",   ctx => VimAddTask(ctx, VimAddMode.Start));
+        _vim.Register("a",   ctx => VimAddTask(ctx, VimAddMode.After));
+        _vim.Register("o",   ctx => VimAddTask(ctx, VimAddMode.LaneBelow));
+        _vim.Register("O",   ctx => VimAddTask(ctx, VimAddMode.LaneAbove));
+
+        _vim.Register("p",   ctx => VimPaste(ctx));
+        _vim.Register("yiw", ctx => VimYank(ctx, isLane: false));
+        _vim.Register("yy",  ctx => VimYank(ctx, isLane: true));
+        _vim.Register("diw", ctx => { if (ctx.ViewModel.SelectedItem != null) ctx.ViewModel.DeleteSelectedItemCommand.Execute(null); });
+        _vim.Register("dd",  ctx => VimDeleteLane(ctx.ViewModel));
+    }
+
+    private void HandleVimKey(KeyEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+        if (_vim.HandleKey(e.Key, shift, new VimContext(vm, GanttView, _vimClipboard)))
+            e.Handled = true;
+    }
+
+    // laneDir: -1 = up, +1 = down, 0 = same lane  /  itemDir: -1 = prev, +1 = next
+    private static void VimNavigate(VimContext ctx, int laneDir, int itemDir)
+    {
+        var vm    = ctx.ViewModel;
+        var items = vm.Items;
+        var lanes = vm.Lanes;
+        if (items.Count == 0) return;
+
+        var selected = vm.SelectedItem;
+        if (selected == null)
+        {
+            vm.SelectedItem = items.OrderBy(i => i.StartTime).FirstOrDefault();
+            return;
+        }
+
+        if (laneDir != 0)
+        {
+            int laneIdx = FindLaneIndex(lanes, selected.LaneId);
+            int step    = laneDir > 0 ? 1 : -1;
+            for (int i = laneIdx + step; step > 0 ? i < lanes.Count : i >= 0; i += step)
+            {
+                var nearest = items
+                    .Where(x => x.LaneId == lanes[i].Id)
+                    .OrderBy(x => Math.Abs(x.StartTime - selected.StartTime))
+                    .FirstOrDefault();
+                if (nearest != null) { vm.SelectedItem = nearest; break; }
+            }
+        }
+        else
+        {
+            var laneItems = items
+                .Where(i => i.LaneId == selected.LaneId)
+                .OrderBy(i => i.StartTime)
+                .ToList();
+            int idx  = laneItems.FindIndex(i => i.Id == selected.Id);
+            int next = idx + itemDir;
+            if (next >= 0 && next < laneItems.Count)
+                vm.SelectedItem = laneItems[next];
+        }
+    }
+
+    private enum VimAddMode { After, Start, LaneBelow, LaneAbove }
+
+    private static void VimAddTask(VimContext ctx, VimAddMode mode)
+    {
+        var vm       = ctx.ViewModel;
+        var selected = vm.SelectedItem;
+        var lanes    = vm.Lanes;
+        Guid   laneId;
+        double startTime;
+
+        switch (mode)
+        {
+            case VimAddMode.After:
+                laneId    = selected?.LaneId ?? lanes.FirstOrDefault()?.Id ?? Guid.Empty;
+                startTime = selected != null ? selected.StartTime + selected.Duration : 0;
+                break;
+            case VimAddMode.Start:
+                laneId    = selected?.LaneId ?? lanes.FirstOrDefault()?.Id ?? Guid.Empty;
+                startTime = 0;
+                break;
+            case VimAddMode.LaneBelow:
+            {
+                int idx = selected != null ? FindLaneIndex(lanes, selected.LaneId) : lanes.Count - 1;
+                laneId    = idx + 1 < lanes.Count ? lanes[idx + 1].Id : vm.InsertLaneAfter(idx);
+                startTime = selected?.StartTime ?? 0;
+                break;
+            }
+            case VimAddMode.LaneAbove:
+            {
+                int idx = selected != null ? FindLaneIndex(lanes, selected.LaneId) : 0;
+                if (idx <= 0) return;
+                laneId    = lanes[idx - 1].Id;
+                startTime = selected?.StartTime ?? 0;
+                break;
+            }
+            default: return;
+        }
+
+        if (laneId == Guid.Empty) return;
+        var newItem = vm.AddNewItemAt(laneId, startTime);
+        if (newItem != null) ctx.GanttView.StartRenameSelectedItem(discardOnCancel: true);
+    }
+
+    private static void VimYank(VimContext ctx, bool isLane)
+    {
+        var vm = ctx.ViewModel;
+        var cb = ctx.Clipboard;
+
+        if (!isLane)
+        {
+            if (vm.SelectedItem == null) return;
+            cb.YankTask(vm.SelectedItem.ToModel());
+        }
+        else
+        {
+            var laneId = vm.SelectedItem?.LaneId ?? vm.Lanes.FirstOrDefault()?.Id ?? Guid.Empty;
+            var lane   = vm.Lanes.FirstOrDefault(l => l.Id == laneId);
+            if (lane == null) return;
+            cb.YankLane(
+                lane.ToModel(),
+                vm.Items.Where(i => i.LaneId == laneId).Select(i => i.ToModel()).ToList());
+        }
+    }
+
+    private static void VimPaste(VimContext ctx)
+    {
+        var vm = ctx.ViewModel;
+        var cb = ctx.Clipboard;
+
+        if (cb.Kind == VimClipboard.ClipKind.Task && cb.Task != null)
+        {
+            var sel    = vm.SelectedItem;
+            var laneId = sel?.LaneId ?? vm.Lanes.FirstOrDefault()?.Id ?? Guid.Empty;
+            if (laneId == Guid.Empty) return;
+            double start = sel != null ? sel.StartTime + sel.Duration : 0;
+            vm.PasteItem(cb.Task, laneId, start);
+        }
+        else if (cb.Kind == VimClipboard.ClipKind.Lane && cb.Lane.HasValue)
+        {
+            int idx = vm.SelectedItem != null
+                ? FindLaneIndex(vm.Lanes, vm.SelectedItem.LaneId)
+                : vm.Lanes.Count - 1;
+            if (idx < 0) idx = vm.Lanes.Count - 1;
+            vm.PasteLane(cb.Lane.Value.lane, cb.Lane.Value.items, idx);
+        }
+    }
+
+    private static void VimDeleteLane(MainViewModel vm)
+    {
+        if (vm.SelectedItem == null) return;
+        var lane = vm.Lanes.FirstOrDefault(l => l.Id == vm.SelectedItem.LaneId);
+        if (lane != null) vm.DeleteLaneWithItems(lane);
+    }
+
+    private static int FindLaneIndex(
+        System.Collections.ObjectModel.ObservableCollection<LaneViewModel> lanes, Guid id)
+    {
+        for (int i = 0; i < lanes.Count; i++)
+            if (lanes[i].Id == id) return i;
+        return -1;
     }
 
     // ── SelectItemCommand relay (click in list = select) ─────────────────

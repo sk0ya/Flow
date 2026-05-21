@@ -127,6 +127,15 @@ public partial class GanttCanvas : UserControl
     public Action<ItemViewModel>? DiscardItemFunc { get; set; }
     public Action<int, int>? ReorderLanesCallback { get; set; }
 
+    public bool IsEditing => IsRenaming;
+
+    public void StartRenameSelectedItem(bool discardOnCancel = false)
+    {
+        var item = SelectedItem;
+        if (item == null || IsRenaming) return;
+        StartTaskRename(item, discardOnCancel);
+    }
+
     // ── Cached rects ──────────────────────────────────────────────────────
     private readonly Dictionary<Guid, Rect> _barRects = new();
     private bool IsRenaming => _renamingLane != null || _renamingItem != null;

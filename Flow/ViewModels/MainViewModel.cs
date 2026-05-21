@@ -278,6 +278,81 @@ public partial class MainViewModel : ObservableObject
         Lanes.Move(fromIndex, toIndex);
     }
 
+    public Guid InsertLaneAfter(int index)
+    {
+        var lane = new LaneViewModel(NextLaneName());
+        Lanes.Insert(Math.Clamp(index + 1, 0, Lanes.Count), lane);
+        return lane.Id;
+    }
+
+    public void DeleteLaneWithItems(LaneViewModel lane)
+    {
+        // Remove all tasks that belong to this lane
+        foreach (var item in Items.Where(i => i.LaneId == lane.Id).ToList())
+        {
+            if (SelectedItem?.Id == item.Id) SelectedItem = null;
+            Items.Remove(item);
+        }
+
+        if (Lanes.Count <= 1)
+        {
+            // Last lane: clear tasks but keep the lane itself
+            Analyze();
+            return;
+        }
+
+        Lanes.Remove(lane);
+        Analyze();
+    }
+
+    // ── Paste helpers (called from Vim keybindings) ───────────────────────
+
+    public ItemViewModel PasteItem(SequenceItem template, Guid laneId, double startTime)
+    {
+        var model = new SequenceItem
+        {
+            Id             = Guid.NewGuid(),
+            Name           = template.Name,
+            Description    = template.Description,
+            CategoryId     = template.CategoryId,
+            Duration       = template.Duration,
+            LaneId         = laneId,
+            StartTime      = FindAvailableStartAtOrAfter(laneId, startTime, template.Duration),
+            PreConditions  = new List<string>(template.PreConditions),
+            PostConditions = new List<string>(template.PostConditions),
+        };
+        var vm = new ItemViewModel(model);
+        Subscribe(vm);
+        Items.Add(vm);
+        SelectedItem = vm;
+        return vm;
+    }
+
+    public void PasteLane(Lane laneTemplate, List<SequenceItem> itemTemplates, int afterIndex)
+    {
+        var lane = new LaneViewModel(laneTemplate.Name);
+        Lanes.Insert(Math.Clamp(afterIndex + 1, 0, Lanes.Count), lane);
+
+        foreach (var t in itemTemplates.OrderBy(i => i.StartTime))
+        {
+            var model = new SequenceItem
+            {
+                Id             = Guid.NewGuid(),
+                Name           = t.Name,
+                Description    = t.Description,
+                CategoryId     = t.CategoryId,
+                Duration       = t.Duration,
+                LaneId         = lane.Id,
+                StartTime      = t.StartTime,
+                PreConditions  = new List<string>(t.PreConditions),
+                PostConditions = new List<string>(t.PostConditions),
+            };
+            var vm = new ItemViewModel(model);
+            Subscribe(vm);
+            Items.Add(vm);
+        }
+    }
+
     private string NextLaneName()
     {
         const string prefix = "レーン ";
