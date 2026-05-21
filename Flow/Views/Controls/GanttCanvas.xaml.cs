@@ -103,8 +103,9 @@ public partial class GanttCanvas : UserControl
     private double _createCurrentMouseY;
 
     // Lane reorder state
-    private int _reorderSourceLane = -1;
-    private int _reorderDropLane   = -1;
+    private int    _reorderSourceLane  = -1;
+    private int    _reorderDropLane    = -1;
+    private double _reorderMouseVisualY = 0;
 
     // Resize drag state: original positions and touching chain
     private Dictionary<Guid, double> _dragLaneOriginalStarts = new();
@@ -208,12 +209,6 @@ public partial class GanttCanvas : UserControl
         }
     }
 
-    private void OnLaneSplitterDragCompleted(object sender, DragCompletedEventArgs e)
-    {
-        // User has manually resized — disable auto-fit until lanes change again
-        _needsAutoFit = false;
-    }
-
     private double CalcAutoFitLaneWidth()
     {
         var lanes = Lanes?.ToList() ?? new List<LaneViewModel>();
@@ -234,8 +229,8 @@ public partial class GanttCanvas : UserControl
             maxTextW = Math.Max(maxTextW, ft.Width);
         }
 
-        // drag-handle(20) + text + right-margin(14)
-        return Math.Clamp(maxTextW + 34, 80, 500);
+        // left-margin(8) + text + right-margin(14)
+        return Math.Clamp(maxTextW + 22, 80, 500);
     }
 
     private void AttachWindowHook()
@@ -397,7 +392,11 @@ public partial class GanttCanvas : UserControl
         if (_drag == DragMode.Create && _createCurrentDuration > 0)
             DrawCreateInfoLabel();
 
-        // 12. Add-lane zone
+        // 12. Lane reorder timeline ghost
+        if (_drag == DragMode.LaneReorder && _reorderSourceLane >= 0 && _reorderSourceLane < nLanes)
+            DrawLaneReorderTimelineGhost(lanes, items, palette, totalW, pps);
+
+        // 13. Add-lane zone
         DrawAddLaneZone(totalW);
 
         RootCanvas.Width  = totalW;
@@ -505,23 +504,15 @@ public partial class GanttCanvas : UserControl
 
             AddTo(FrozenLaneCanvas, new TextBlock
             {
-                Text = "⠿",
-                FontSize = 10,
-                Cursor = Cursors.SizeNS,
-                Foreground = CreateMutedOverlayBrush(),
-            }, 5, rowY + (LaneH - 14) / 2);
-
-            AddTo(FrozenLaneCanvas, new TextBlock
-            {
                 Text = lanes[i].Name,
                 FontSize = 12,
                 FontWeight = isActiveLane ? FontWeights.SemiBold : FontWeights.Normal,
                 Foreground = palette.TextPrimary,
-                Opacity = isReorderSource ? 0.3 : 1.0,
-                Width = LaneHeaderW - 20,
+                Opacity = isReorderSource ? 0.25 : 1.0,
+                Width = LaneHeaderW - 16,
                 TextAlignment = TextAlignment.Right,
                 TextTrimming = TextTrimming.CharacterEllipsis,
-            }, 18, rowY + (LaneH - 15) / 2);
+            }, 8, rowY + (LaneH - 15) / 2);
 
             if (isReorderSource)
             {
@@ -531,26 +522,6 @@ public partial class GanttCanvas : UserControl
                     Height = LaneH,
                     Fill = CreateOverlayBrush(),
                 }, 0, rowY);
-
-                AddTo(FrozenLaneCanvas, new TextBlock
-                {
-                    Text = "⠿",
-                    FontSize = 10,
-                    Cursor = Cursors.SizeNS,
-                    Foreground = CreateMutedOverlayBrush(),
-                }, 5, rowY + (LaneH - 14) / 2);
-
-                AddTo(FrozenLaneCanvas, new TextBlock
-                {
-                    Text = lanes[i].Name,
-                    FontSize = 12,
-                    FontWeight = isActiveLane ? FontWeights.SemiBold : FontWeights.Normal,
-                    Foreground = palette.TextPrimary,
-                    Opacity = 0.3,
-                    Width = LaneHeaderW - 20,
-                    TextAlignment = TextAlignment.Right,
-                    TextTrimming = TextTrimming.CharacterEllipsis,
-                }, 18, rowY + (LaneH - 15) / 2);
             }
         }
 
@@ -559,6 +530,45 @@ public partial class GanttCanvas : UserControl
             double y = _reorderDropLane * LaneH - offset;
             AddTo(FrozenLaneCanvas, new Ellipse { Width = 10, Height = 10, Fill = palette.Accent }, 1, y - 5);
             AddTo(FrozenLaneCanvas, new Rectangle { Width = LaneHeaderW - 11, Height = 2, Fill = palette.Accent }, 11, y - 1);
+        }
+
+        if (_drag == DragMode.LaneReorder && _reorderSourceLane >= 0 && _reorderSourceLane < lanes.Count)
+        {
+            var ghostLane = lanes[_reorderSourceLane];
+            bool isGhostActive = SelectedItem != null && SelectedItem.LaneId == ghostLane.Id;
+            double ghostTop = Math.Clamp(_reorderMouseVisualY - LaneH / 2.0, 0, Math.Max(0, viewportH - LaneH));
+
+            // shadow
+            AddTo(FrozenLaneCanvas, new Border
+            {
+                Width = LaneHeaderW - 6,
+                Height = LaneH - 2,
+                Background = palette.Border,
+                CornerRadius = new CornerRadius(6),
+                Opacity = 0.35,
+            }, 5, ghostTop + 6);
+
+            // ghost body
+            AddTo(FrozenLaneCanvas, new Border
+            {
+                Width = LaneHeaderW - 6,
+                Height = LaneH - 2,
+                Background = palette.SurfaceAlt,
+                BorderBrush = palette.Accent,
+                BorderThickness = new Thickness(1.5),
+                CornerRadius = new CornerRadius(6),
+            }, 3, ghostTop + 2);
+
+            AddTo(FrozenLaneCanvas, new TextBlock
+            {
+                Text = ghostLane.Name,
+                FontSize = 12,
+                FontWeight = isGhostActive ? FontWeights.SemiBold : FontWeights.Normal,
+                Foreground = palette.TextPrimary,
+                Width = LaneHeaderW - 20,
+                TextAlignment = TextAlignment.Right,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            }, 8, ghostTop + 2 + (LaneH - 2 - 15) / 2);
         }
 
         DrawFrozenAddLaneZone(lanes.Count, offset);
@@ -636,15 +646,119 @@ public partial class GanttCanvas : UserControl
         double ghostY = _dragLaneIdx * LaneH + (LaneH - BarH) / 2.0;
         var palette = ThemeService.CurrentPalette;
 
+        var category = item.CategoryId != Guid.Empty
+            ? Categories?.FirstOrDefault(c => c.Id == item.CategoryId)
+            : null;
+        Brush fill = item.HasErrors
+            ? palette.DangerSoft
+            : (category != null ? category.Brush : palette.Accent);
+        Brush textFill = item.HasErrors || category == null
+            ? palette.AccentText
+            : GetCategoryTextBrush(category.ColorValue);
+
+        // shadow
         Add(new Border
         {
             Width = ghostW,
             Height = BarH,
-            Background = palette.AccentGhost,
+            Background = palette.Border,
             CornerRadius = new CornerRadius(5),
+            Opacity = 0.35,
+        }, ghostX + 3, ghostY + 5);
+
+        // floating bar
+        var ghost = new Border
+        {
+            Width = ghostW,
+            Height = BarH,
+            Background = fill,
+            CornerRadius = new CornerRadius(5),
+            BorderBrush = palette.TextPrimary,
+            BorderThickness = new Thickness(1.5),
+            Opacity = 0.88,
+            ClipToBounds = true,
+        };
+        if (ghostW > 24)
+        {
+            ghost.Child = new TextBlock
+            {
+                Text = item.Name,
+                FontSize = 11,
+                Foreground = textFill,
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(7, 0, 7, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            };
+        }
+        Add(ghost, ghostX, ghostY - 2);
+    }
+
+    private void DrawLaneReorderTimelineGhost(
+        List<LaneViewModel> lanes, List<ItemViewModel> items,
+        ThemePalette palette, double totalW, double pps)
+    {
+        var sourceLane = lanes[_reorderSourceLane];
+        double ghostY = _reorderMouseVisualY + TimelineScrollViewer.VerticalOffset - LaneH / 2.0;
+
+        // shadow
+        Add(new Rectangle
+        {
+            Width = totalW, Height = LaneH,
+            Fill = palette.Border,
+            Opacity = 0.25,
+        }, 0, ghostY + 5);
+
+        // row background
+        Add(new Border
+        {
+            Width = totalW, Height = LaneH - 2,
+            Background = palette.SurfaceAlt,
             BorderBrush = palette.Accent,
-            BorderThickness = new Thickness(2),
-        }, ghostX, ghostY);
+            BorderThickness = new Thickness(0, 1.5, 0, 1.5),
+            Opacity = 0.9,
+        }, 0, ghostY + 1);
+
+        // task bars in the ghost row
+        foreach (var item in items.Where(i => i.LaneId == sourceLane.Id))
+        {
+            double bx = item.StartTime * pps;
+            double bw = Math.Max(item.Duration * pps, MinBarW);
+            double by = ghostY + 1 + (LaneH - BarH) / 2.0;
+
+            var category = item.CategoryId != Guid.Empty
+                ? Categories?.FirstOrDefault(c => c.Id == item.CategoryId)
+                : null;
+            Brush fill = item.HasErrors
+                ? palette.DangerSoft
+                : (category != null ? category.Brush : palette.Accent);
+
+            var bar = new Border
+            {
+                Width = bw, Height = BarH,
+                Background = fill,
+                CornerRadius = new CornerRadius(5),
+                Opacity = 0.88,
+                ClipToBounds = true,
+            };
+            if (bw > 24)
+            {
+                Brush textFill = item.HasErrors || category == null
+                    ? palette.AccentText
+                    : GetCategoryTextBrush(category.ColorValue);
+                bar.Child = new TextBlock
+                {
+                    Text = item.Name,
+                    FontSize = 11,
+                    Foreground = textFill,
+                    FontWeight = FontWeights.SemiBold,
+                    Margin = new Thickness(7, 0, 7, 0),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                };
+            }
+            Add(bar, bx, by);
+        }
     }
 
     private void DrawCreateGhost()
@@ -794,12 +908,12 @@ public partial class GanttCanvas : UserControl
             Cursor = AddLaneFunc != null ? Cursors.Hand : Cursors.Arrow,
             Child = new TextBlock
             {
-                Text = "+ 新しいレーン",
-                FontSize = 10,
+                Text = "+",
+                FontSize = 16,
+                FontWeight = FontWeights.Light,
                 Foreground = active ? palette.Accent : palette.TextMuted,
-                HorizontalAlignment = HorizontalAlignment.Right,
+                HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 10, 0),
             }
         };
 
@@ -1476,6 +1590,7 @@ public partial class GanttCanvas : UserControl
     private void OnFrozenLaneMouseMove(object sender, MouseEventArgs e)
     {
         var pos = GetFrozenLaneContentPoint(e);
+        _reorderMouseVisualY = e.GetPosition(FrozenLaneCanvas).Y;
         UpdateFrozenLaneCursor(pos);
 
         if (_drag != DragMode.LaneReorder) return;
@@ -1585,7 +1700,7 @@ public partial class GanttCanvas : UserControl
         }
 
         int laneIdx = GetLaneIndex(contentPos.Y);
-        FrozenLaneCanvas.Cursor = laneIdx >= 0 && laneIdx < lanes.Count ? Cursors.SizeNS : Cursors.Arrow;
+        FrozenLaneCanvas.Cursor = laneIdx >= 0 && laneIdx < lanes.Count ? Cursors.SizeAll : Cursors.Arrow;
     }
 
     private void TryAddTaskAt(Point pos, MouseButtonEventArgs e)

@@ -8,7 +8,6 @@
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="150" MinWidth="60"/>
-            <ColumnDefinition Width="5"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
@@ -28,7 +27,7 @@
 
         <Canvas x:Name="FrozenTimeHeaderCanvas"
                 Grid.Row="0"
-                Grid.Column="2"
+                Grid.Column="1"
                 Background="{DynamicResource AppSurfaceMutedBrush}"
                 ClipToBounds="True"/>
 
@@ -38,18 +37,9 @@
                 Background="{DynamicResource AppSurfaceAltBrush}"
                 ClipToBounds="True"/>
 
-        <GridSplitter x:Name="LaneSplitter"
-                      Grid.Column="1"
-                      Grid.RowSpan="2"
-                      Width="5"
-                      HorizontalAlignment="Stretch"
-                      Background="{DynamicResource AppBorderBrush}"
-                      Cursor="SizeWE"
-                      DragCompleted="OnLaneSplitterDragCompleted"/>
-
         <ScrollViewer x:Name="TimelineScrollViewer"
                       Grid.Row="1"
-                      Grid.Column="2"
+                      Grid.Column="1"
                       HorizontalScrollBarVisibility="Auto"
                       VerticalScrollBarVisibility="Auto"
                       Background="{DynamicResource AppSurfaceAltBrush}"
