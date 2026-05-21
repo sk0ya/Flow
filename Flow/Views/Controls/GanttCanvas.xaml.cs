@@ -183,7 +183,11 @@ public partial class GanttCanvas : UserControl
         RenderFrozenLayers();
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e) => AttachWindowHook();
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        AttachWindowHook();
+        Render();
+    }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
@@ -229,8 +233,8 @@ public partial class GanttCanvas : UserControl
             maxTextW = Math.Max(maxTextW, ft.Width);
         }
 
-        // left-margin(8) + text + right-margin(14)
-        return Math.Clamp(maxTextW + 22, 80, 500);
+        // left-margin(8) + text + right-margin(8)
+        return Math.Clamp(maxTextW + 16, 80, 500);
     }
 
     private void AttachWindowHook()
@@ -571,7 +575,7 @@ public partial class GanttCanvas : UserControl
             }, 8, ghostTop + 2 + (LaneH - 2 - 15) / 2);
         }
 
-        DrawFrozenAddLaneZone(lanes.Count, offset);
+        DrawFrozenAddLaneZone(lanes.Count, offset, viewportH);
         AddTo(FrozenLaneCanvas, VLine(LaneHeaderW - 0.5, 0, viewportH, palette.BorderStrong, 1), 0, 0);
     }
 
@@ -890,9 +894,10 @@ public partial class GanttCanvas : UserControl
         Add(zone, 0, zoneY);
     }
 
-    private void DrawFrozenAddLaneZone(int laneCount, double verticalOffset)
+    private void DrawFrozenAddLaneZone(int laneCount, double verticalOffset, double viewportH)
     {
-        double zoneY  = laneCount * LaneH - verticalOffset;
+        double naturalY = laneCount * LaneH - verticalOffset;
+        double zoneY = Math.Clamp(naturalY, 0, Math.Max(0, viewportH - AddLaneZoneH));
         bool   active = _dragToNewLane;
         var palette = ThemeService.CurrentPalette;
 
@@ -1700,7 +1705,7 @@ public partial class GanttCanvas : UserControl
         }
 
         int laneIdx = GetLaneIndex(contentPos.Y);
-        FrozenLaneCanvas.Cursor = laneIdx >= 0 && laneIdx < lanes.Count ? Cursors.SizeAll : Cursors.Arrow;
+        FrozenLaneCanvas.Cursor = Cursors.Arrow;
     }
 
     private void TryAddTaskAt(Point pos, MouseButtonEventArgs e)
