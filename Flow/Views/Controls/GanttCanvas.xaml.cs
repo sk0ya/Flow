@@ -79,8 +79,9 @@ public partial class GanttCanvas : UserControl
     private const double TimeHeaderH  = 30;
     private const double TimeTickLabelOffset = 4;
     private const double TimeTickLabelWidth  = 36;
-    private const double ResizeW      = 8;
-    private const double MinBarW      = 4;
+    private const double ResizeW          = 8;
+    private const double MinBarW          = 4;
+    private const double ResizeSnapPixels = 10.0;
     private const double AddLaneZoneH = 32;
     private const int    WmMouseHWheel = 0x020E;
     private const int    WheelDelta    = 120;
@@ -1161,6 +1162,46 @@ public partial class GanttCanvas : UserControl
         return NormalizeTimelineValue(Math.Clamp(proposedDuration, minDuration, Math.Max(minDuration, maxDur)));
     }
 
+    private double SnapResizeEnd(ItemViewModel item, double proposedEnd, double pps)
+    {
+        double snapRadius = ResizeSnapPixels / pps;
+        double minEnd = item.StartTime + Math.Min(GetGridStepInSeconds(), 1.0);
+
+        double best = proposedEnd;
+        double bestDist = snapRadius + 1;
+
+        void TrySnap(double candidate)
+        {
+            if (candidate < minEnd) return;
+            double d = Math.Abs(proposedEnd - candidate);
+            if (d < bestDist) { bestDist = d; best = candidate; }
+        }
+
+        // Grid snap
+        double gridStep = GetGridStepInSeconds();
+        if (gridStep > 0)
+        {
+            double nearest = NormalizeTimelineValue(Math.Round(proposedEnd / gridStep) * gridStep);
+            TrySnap(nearest);
+            TrySnap(NormalizeTimelineValue(nearest - gridStep));
+            TrySnap(NormalizeTimelineValue(nearest + gridStep));
+        }
+
+        // Snap to task boundaries (start/end) of non-chain tasks in the same lane
+        var chainIds = new HashSet<Guid>(_dragTouchingChain.Select(t => t.Id)) { item.Id };
+        var others = ItemsSource?
+            .Where(i => !chainIds.Contains(i.Id) && i.LaneId == item.LaneId)
+            .ToList() ?? new List<ItemViewModel>();
+
+        foreach (var other in others)
+        {
+            TrySnap(other.StartTime);
+            TrySnap(other.StartTime + other.Duration);
+        }
+
+        return NormalizeTimelineValue(best);
+    }
+
     // ── Drag & Drop ───────────────────────────────────────────────────────
 
     private void OnMouseDown(object sender, MouseButtonEventArgs e)
@@ -1271,8 +1312,9 @@ public partial class GanttCanvas : UserControl
                     if (_dragLaneOriginalStarts.TryGetValue(i.Id, out var orig))
                         i.StartTime = orig;
 
-            double rawEnd = NormalizeTimelineValue(pos.X / pps);
-            double rawDur = rawEnd - _dragItem.StartTime;
+            double rawEnd     = NormalizeTimelineValue(pos.X / pps);
+            double snappedEnd = SnapResizeEnd(_dragItem, rawEnd, pps);
+            double rawDur     = snappedEnd - _dragItem.StartTime;
             double minDuration = Math.Min(GetGridStepInSeconds(), 1.0);
             _dragItem.Duration = Math.Max(minDuration, NormalizeTimelineValue(rawDur));
 
