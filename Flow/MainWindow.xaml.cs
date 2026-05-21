@@ -282,27 +282,48 @@ public partial class MainWindow : Window
         });
 
         // ── Task-jump navigation ──────────────────────────────────────────
-        _vim.Register("w", ctx => {   // next task start
-            var laneId = ctx.CursorLaneId();
-            var next   = ctx.ViewModel.Items
-                .Where(i => i.LaneId == laneId && i.StartTime > ctx.ViewModel.CursorTime + 1e-9)
-                .OrderBy(i => i.StartTime).FirstOrDefault();
-            if (next != null) { ctx.ViewModel.CursorTime = next.StartTime; ctx.ViewModel.SetSelectionFromVim(next); }
+        _vim.Register("w", ctx => {   // next task start (crosses lanes)
+            var vm    = ctx.ViewModel;
+            var lanes = vm.Lanes;
+            for (int li = vm.CursorLaneIndex; li < lanes.Count; li++)
+            {
+                double minStart = li == vm.CursorLaneIndex ? vm.CursorTime + 1e-9 : -1e-9;
+                var next = vm.Items
+                    .Where(i => i.LaneId == lanes[li].Id && i.StartTime > minStart)
+                    .OrderBy(i => i.StartTime).FirstOrDefault();
+                if (next != null)
+                {
+                    vm.CursorLaneIndex = li;
+                    vm.CursorTime = next.StartTime;
+                    vm.SetSelectionFromVim(next);
+                    return;
+                }
+            }
         });
-        _vim.Register("b", ctx => {   // previous task start (or start of current task)
-            var vm     = ctx.ViewModel;
-            var laneId = ctx.CursorLaneId();
-            var cur    = ctx.TaskAtCursor();
+        _vim.Register("b", ctx => {   // previous task start (crosses lanes)
+            var vm  = ctx.ViewModel;
+            var lanes = vm.Lanes;
+            var cur = ctx.TaskAtCursor();
             if (cur != null && vm.CursorTime > cur.StartTime + 1e-9)
             {
                 vm.CursorTime = cur.StartTime;
                 vm.SetSelectionFromVim(cur);
                 return;
             }
-            var prev = vm.Items
-                .Where(i => i.LaneId == laneId && i.StartTime < vm.CursorTime - 1e-9)
-                .OrderByDescending(i => i.StartTime).FirstOrDefault();
-            if (prev != null) { vm.CursorTime = prev.StartTime; vm.SetSelectionFromVim(prev); }
+            for (int li = vm.CursorLaneIndex; li >= 0; li--)
+            {
+                double maxStart = li == vm.CursorLaneIndex ? vm.CursorTime - 1e-9 : double.MaxValue;
+                var prev = vm.Items
+                    .Where(i => i.LaneId == lanes[li].Id && i.StartTime < maxStart)
+                    .OrderByDescending(i => i.StartTime).FirstOrDefault();
+                if (prev != null)
+                {
+                    vm.CursorLaneIndex = li;
+                    vm.CursorTime = prev.StartTime;
+                    vm.SetSelectionFromVim(prev);
+                    return;
+                }
+            }
         });
         _vim.Register("e", ctx => {   // end of current/next task
             var vm     = ctx.ViewModel;
@@ -372,7 +393,8 @@ public partial class MainWindow : Window
             var lane = ctx.ViewModel.Lanes.ElementAtOrDefault(ctx.ViewModel.CursorLaneIndex);
             if (lane != null) ctx.ViewModel.DeleteLaneWithItems(lane);
         });
-        _vim.Register("p", ctx => VimPaste(ctx));
+        _vim.Register("p", ctx => VimPaste(ctx, before: false));
+        _vim.Register("P", ctx => VimPaste(ctx, before: true));
     }
 
     private void HandleVimKey(KeyEventArgs e)
@@ -426,7 +448,7 @@ public partial class MainWindow : Window
         if (newItem != null) ctx.GanttView.StartRenameSelectedItem(discardOnCancel: true);
     }
 
-    private static void VimPaste(VimContext ctx)
+    private static void VimPaste(VimContext ctx, bool before)
     {
         var vm = ctx.ViewModel;
         var cb = ctx.Clipboard;
@@ -435,11 +457,16 @@ public partial class MainWindow : Window
         {
             var laneId = ctx.CursorLaneId();
             if (laneId == Guid.Empty) return;
-            vm.PasteItem(cb.Task, laneId, vm.CursorTime);
+            double start = before
+                ? Math.Max(0, vm.CursorTime - cb.Task.Duration)
+                : vm.CursorTime;
+            vm.PasteItem(cb.Task, laneId, start);
         }
         else if (cb.Kind == VimClipboard.ClipKind.Lane && cb.Lane.HasValue)
         {
-            vm.PasteLane(cb.Lane.Value.lane, cb.Lane.Value.items, vm.CursorLaneIndex);
+            // p = after cursor lane, P = before cursor lane
+            int afterIndex = before ? vm.CursorLaneIndex - 1 : vm.CursorLaneIndex;
+            vm.PasteLane(cb.Lane.Value.lane, cb.Lane.Value.items, afterIndex);
         }
     }
 
