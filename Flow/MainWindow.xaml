@@ -913,7 +913,6 @@
                 <Grid Visibility="{Binding IsTaskEditorActive, Converter={StaticResource BoolVis}}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
@@ -940,31 +939,9 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Editor header -->
-                    <Border Grid.Row="1" Padding="10,6"
-                            Background="{DynamicResource AppAccentSubtleBrush}" BorderBrush="{DynamicResource AppAccentOutlineBrush}" BorderThickness="0,0,0,1">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="Visibility" Value="Visible"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding SelectedItem}" Value="{x:Null}">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                        <Grid>
-                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AppAccentBrush}" VerticalAlignment="Center">
-                                <Run Text="✏  "/>
-                                <Run Text="{Binding SelectedItem.Name, Mode=OneWay, FallbackValue=''}"/>
-                            </TextBlock>
-                            <TextBlock Text="Delete で削除" FontSize="9" Foreground="{DynamicResource AppTextMutedBrush}"
-                                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                        </Grid>
-                    </Border>
 
                     <!-- Empty state -->
-                    <Border Grid.Row="2" Margin="16,30" Padding="14"
+                    <Border Grid.Row="1" Margin="16,30" Padding="14"
                             Background="{DynamicResource AppSurfaceAltBrush}" CornerRadius="10"
                             BorderBrush="{DynamicResource AppBorderSoftBrush}" BorderThickness="1">
                         <Border.Style>
@@ -990,7 +967,7 @@
                     </Border>
 
                     <!-- Item editor -->
-                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
                                   DataContext="{Binding SelectedItem}">
                         <ScrollViewer.Style>
                             <Style TargetType="ScrollViewer">
@@ -1152,7 +1129,7 @@
                     </ScrollViewer>
 
                     <!-- Undo toast -->
-                    <Border Grid.Row="3" Padding="12,8" Margin="8,4,8,6"
+                    <Border Grid.Row="2" Padding="12,8" Margin="8,4,8,6"
                             Background="{DynamicResource AppToastBackgroundBrush}" CornerRadius="8"
                             Visibility="{Binding CanUndoDelete, Converter={StaticResource BoolVis}}">
                         <Grid>
