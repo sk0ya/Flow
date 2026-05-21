@@ -299,7 +299,7 @@
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Ico" Property="Foreground" Value="{DynamicResource AppInverseTextBrush}"/>
+                                <Setter TargetName="Ico" Property="Foreground" Value="{DynamicResource AppActivityBarIconSelectedBrush}"/>
                                 <Setter TargetName="Bar" Property="Background" Value="{DynamicResource AppAccentBrush}"/>
                                 <Setter TargetName="Bg" Property="Background" Value="{DynamicResource AppActivityBarSelectedBackgroundBrush}"/>
                             </Trigger>

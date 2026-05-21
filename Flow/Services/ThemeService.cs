@@ -92,8 +92,12 @@ public static class ThemeService
         Set(resources, "AppActivityBarSelectedBackgroundBrush", palette.ActivityBarSelectedBackground);
         Set(resources, "AppActivityBarIconBrush", palette.ActivityBarIcon);
         Set(resources, "AppActivityBarIconHoverBrush", palette.ActivityBarIconHover);
+        Set(resources, "AppActivityBarIconSelectedBrush", palette.ActivityBarIconSelected);
         Set(resources, "AppToastBackgroundBrush", palette.ToastBackground);
         resources["AppPopupShadowColor"] = palette.PopupShadowColor;
+        Set(resources, "AppScrollThumbBrush", palette.Border);
+        Set(resources, "AppScrollThumbHoverBrush", palette.BorderStrong);
+        Set(resources, "AppScrollThumbDragBrush", palette.TextMuted);
     }
 
     private static void Set(ResourceDictionary resources, string key, Brush value) => resources[key] = value;
@@ -156,12 +160,13 @@ public static class ThemeService
             WarningText = Brush(isDark ? warning : FromHex("#E65100")),
             WarningSurface = Brush(Mix(warning, surface, isDark ? 0.18 : 0.14)),
             WarningBorder = Brush(Mix(warning, border, isDark ? 0.45 : 0.32)),
-            ActivityBarBackground = Brush(isDark ? FromHex("#111318") : FromHex("#252526")),
-            ActivityBarBorder = Brush(isDark ? FromHex("#0D0F13") : FromHex("#1A1A1A")),
-            ActivityBarHover = Brush(isDark ? FromHex("#1D222B") : FromHex("#3C3C3C")),
-            ActivityBarSelectedBackground = Brush(isDark ? FromHex("#27303B") : FromHex("#37373D")),
-            ActivityBarIcon = Brush(isDark ? FromHex("#8B95A7") : FromHex("#858585")),
-            ActivityBarIconHover = Brush(isDark ? FromHex("#F5F7FA") : FromHex("#CCCCCC")),
+            ActivityBarBackground = Brush(isDark ? FromHex("#111318") : FromHex("#E8EBF2")),
+            ActivityBarBorder = Brush(isDark ? FromHex("#0D0F13") : FromHex("#D0D5E0")),
+            ActivityBarHover = Brush(isDark ? FromHex("#1D222B") : FromHex("#D8DCE8")),
+            ActivityBarSelectedBackground = Brush(isDark ? FromHex("#27303B") : Mix(accent, surfaceAlt, isDark ? 0.28 : 0.18)),
+            ActivityBarIcon = Brush(isDark ? FromHex("#8B95A7") : FromHex("#6B7280")),
+            ActivityBarIconHover = Brush(isDark ? FromHex("#F5F7FA") : FromHex("#374151")),
+            ActivityBarIconSelected = Brush(isDark ? FromHex("#F5F7FA") : accent),
             ToastBackground = Brush(isDark ? FromHex("#13161B") : FromHex("#323232")),
             PopupShadowColor = isDark ? FromHex("#000000") : FromHex("#000000"),
         };
@@ -240,6 +245,7 @@ public sealed class ThemePalette
     public Brush ActivityBarSelectedBackground { get; init; } = null!;
     public Brush ActivityBarIcon { get; init; } = null!;
     public Brush ActivityBarIconHover { get; init; } = null!;
+    public Brush ActivityBarIconSelected { get; init; } = null!;
     public Brush ToastBackground { get; init; } = null!;
     public Color PopupShadowColor { get; init; }
 }
