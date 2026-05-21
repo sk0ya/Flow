@@ -88,13 +88,19 @@ public partial class GanttCanvas : UserControl
 
     // ── Drag state ────────────────────────────────────────────────────────
     private ItemViewModel? _dragItem;
-    private enum DragMode { None, Move, Resize, LaneReorder }
+    private enum DragMode { None, Move, Resize, LaneReorder, Create }
     private DragMode _drag = DragMode.None;
     private double _dragOriginStart;
     private double _dragOriginDuration;
     private double _dragMouseOffsetX;
     private int    _dragLaneIdx;
     private bool   _dragToNewLane;
+
+    // Create drag state
+    private double _createStartTime;
+    private double _createCurrentDuration;
+    private int    _createLaneIdx;
+    private double _createCurrentMouseY;
 
     // Lane reorder state
     private int _reorderSourceLane = -1;
@@ -381,9 +387,15 @@ public partial class GanttCanvas : UserControl
         if (_drag == DragMode.Move && _dragItem != null)
             DrawDragGhost(_dragItem, ppu);
 
+        if (_drag == DragMode.Create && _createCurrentDuration > 0)
+            DrawCreateGhost();
+
         // 11. Drag info label (duration + end time above right edge)
         if ((_drag == DragMode.Move || _drag == DragMode.Resize) && _dragItem != null)
             DrawDragInfoLabel(_dragItem, pps);
+
+        if (_drag == DragMode.Create && _createCurrentDuration > 0)
+            DrawCreateInfoLabel();
 
         // 12. Add-lane zone
         DrawAddLaneZone(totalW);
@@ -633,6 +645,64 @@ public partial class GanttCanvas : UserControl
             BorderBrush = palette.Accent,
             BorderThickness = new Thickness(2),
         }, ghostX, ghostY);
+    }
+
+    private void DrawCreateGhost()
+    {
+        double pps   = GetPixelsPerSecond();
+        double ghostX = _createStartTime * pps;
+        double ghostW = Math.Max(_createCurrentDuration * pps, MinBarW);
+        double ghostY = _createLaneIdx * LaneH + (LaneH - BarH) / 2.0;
+        var palette   = ThemeService.CurrentPalette;
+
+        Add(new Border
+        {
+            Width           = ghostW,
+            Height          = BarH,
+            Background      = palette.AccentGhost,
+            CornerRadius    = new CornerRadius(5),
+            BorderBrush     = palette.Accent,
+            BorderThickness = new Thickness(2),
+        }, ghostX, ghostY);
+    }
+
+    private void DrawCreateInfoLabel()
+    {
+        double pps    = GetPixelsPerSecond();
+        double endTime = _createStartTime + _createCurrentDuration;
+        double endX    = endTime * pps;
+        double barY    = _createLaneIdx * LaneH + (LaneH - BarH) / 2.0;
+        var palette    = ThemeService.CurrentPalette;
+
+        var sp = new StackPanel();
+        sp.Children.Add(new TextBlock
+        {
+            Text       = $"所要  {HmsConverter.Format(_createCurrentDuration)}",
+            FontSize   = 10,
+            Foreground = palette.TextSecondary,
+        });
+        sp.Children.Add(new TextBlock
+        {
+            Text       = $"完了  {HmsConverter.Format(endTime)}",
+            FontSize   = 10,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = palette.TextPrimary,
+        });
+
+        var label = new Border
+        {
+            Background      = palette.Surface,
+            BorderBrush     = palette.Accent,
+            BorderThickness = new Thickness(1),
+            CornerRadius    = new CornerRadius(4),
+            Padding         = new Thickness(6, 3, 6, 3),
+            Child           = sp,
+        };
+        Panel.SetZIndex(label, int.MaxValue);
+
+        const double labelW = 108;
+        const double labelH = 38;
+        Add(label, Math.Max(0, endX - labelW / 2), Math.Max(0, barY - labelH - 6));
     }
 
     private void DrawDragInfoLabel(ItemViewModel item, double pps)
@@ -1212,7 +1282,22 @@ public partial class GanttCanvas : UserControl
         var item = HitTestItem(pos);
         if (item == null)
         {
-            TryAddTaskAt(pos, e);
+            var lanes = Lanes?.ToList() ?? new List<LaneViewModel>();
+            int laneIdx = GetLaneIndex(pos.Y);
+            if (laneIdx < 0 || laneIdx >= lanes.Count || AddItemAtFunc == null)
+            {
+                SelectedItem = null;
+                e.Handled = true;
+                return;
+            }
+
+            _createStartTime = SnapToSeconds(Math.Max(0, pos.X / GetPixelsPerSecond()));
+            _createCurrentDuration = 0;
+            _createLaneIdx = laneIdx;
+            _createCurrentMouseY = pos.Y;
+            _drag = DragMode.Create;
+            RootCanvas.CaptureMouse();
+            e.Handled = true;
             return;
         }
 
@@ -1274,6 +1359,20 @@ public partial class GanttCanvas : UserControl
     {
         var pos = e.GetPosition(RootCanvas);
         UpdateTimelineCursor(pos);
+
+        if (_drag == DragMode.Create)
+        {
+            _createCurrentMouseY = pos.Y;
+            double cpps = GetPixelsPerSecond();
+            double rawEnd = pos.X / cpps;
+            double rawDur = rawEnd - _createStartTime;
+            double minDur = Math.Max(GetGridStepInSeconds(), 1.0);
+            _createCurrentDuration = rawDur > 0
+                ? Math.Max(minDur, SnapToSeconds(rawDur))
+                : 0;
+            Render();
+            return;
+        }
 
         if (_drag == DragMode.None) return;
         if (_dragItem == null) return;
@@ -1411,6 +1510,22 @@ public partial class GanttCanvas : UserControl
             _reorderSourceLane = -1;
             _reorderDropLane = -1;
         }
+        else if (_drag == DragMode.Create)
+        {
+            var lanes = Lanes?.ToList() ?? new List<LaneViewModel>();
+            int finalLane = GetLaneIndex(_createCurrentMouseY);
+            if (finalLane >= 0 && finalLane < lanes.Count && _createCurrentDuration > 0 && AddItemAtFunc != null)
+            {
+                var newItem = AddItemAtFunc(lanes[_createLaneIdx].Id, _createStartTime);
+                if (newItem != null)
+                {
+                    newItem.Duration = _createCurrentDuration;
+                    SelectedItem = newItem;
+                    StartTaskRename(newItem, discardOnCancel: true);
+                }
+            }
+            _createCurrentDuration = 0;
+        }
         else if (_dragToNewLane && _dragItem != null && AddLaneFunc != null)
         {
             var newLaneId = AddLaneFunc();
@@ -1435,12 +1550,19 @@ public partial class GanttCanvas : UserControl
 
     private void UpdateTimelineCursor(Point pos)
     {
+        if (_drag == DragMode.Create)
+        {
+            RootCanvas.Cursor = Cursors.Cross;
+            return;
+        }
         if (_drag != DragMode.None) return;
 
         var item = HitTestItem(pos);
         if (item == null)
         {
-            RootCanvas.Cursor = Cursors.Arrow;
+            var lanes = Lanes?.ToList() ?? new List<LaneViewModel>();
+            int li = GetLaneIndex(pos.Y);
+            RootCanvas.Cursor = (li >= 0 && li < lanes.Count) ? Cursors.Cross : Cursors.Arrow;
             return;
         }
 
