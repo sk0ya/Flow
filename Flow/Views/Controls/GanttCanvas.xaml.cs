@@ -52,10 +52,14 @@ public partial class GanttCanvas : UserControl
             typeof(GanttCanvas), new PropertyMetadata(null, OnAnyChanged));
     public static readonly DependencyProperty CursorLaneIndexProperty =
         DependencyProperty.Register(nameof(CursorLaneIndex), typeof(int),
-            typeof(GanttCanvas), new PropertyMetadata(0, (d, _) => ((GanttCanvas)d).Render()));
+            typeof(GanttCanvas), new FrameworkPropertyMetadata(0,
+                FrameworkPropertyMetadataOptions.BindsTwoWayByDefault,
+                (d, _) => ((GanttCanvas)d).Render()));
     public static readonly DependencyProperty CursorTimeProperty =
         DependencyProperty.Register(nameof(CursorTime), typeof(double),
-            typeof(GanttCanvas), new PropertyMetadata(0.0, (d, _) => ((GanttCanvas)d).Render()));
+            typeof(GanttCanvas), new FrameworkPropertyMetadata(0.0,
+                FrameworkPropertyMetadataOptions.BindsTwoWayByDefault,
+                (d, _) => ((GanttCanvas)d).Render()));
 
     public IEnumerable<ItemViewModel>? ItemsSource
     { get => (IEnumerable<ItemViewModel>?)GetValue(ItemsSourceProperty); set => SetValue(ItemsSourceProperty, value); }
@@ -1037,11 +1041,19 @@ public partial class GanttCanvas : UserControl
 
     private void OnPreviewGanttMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (!IsRenaming || IsClickInsideActiveEditor(e.OriginalSource as DependencyObject)) return;
+        if (IsRenaming)
+        {
+            if (!IsClickInsideActiveEditor(e.OriginalSource as DependencyObject))
+            {
+                CommitActiveRename();
+                e.Handled = true;
+            }
+            return;
+        }
 
-        // The first click outside an inline editor only confirms the edit.
-        CommitActiveRename();
-        e.Handled = true;
+        // Steal keyboard focus from sidebar TextBoxes so Vim keys work after a canvas click.
+        if (Keyboard.FocusedElement is TextBox or PasswordBox)
+            Keyboard.ClearFocus();
     }
 
     private void CommitActiveRename()
