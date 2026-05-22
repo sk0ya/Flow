@@ -55,7 +55,11 @@ public sealed class VimContext(MainViewModel viewModel, GanttCanvas ganttView, V
             i.StartTime + i.Duration > t + 1e-9);
     }
 
-    public void SyncSelection() => ViewModel.SetSelectionFromVim(TaskAtCursor());
+    public void SyncSelection()
+    {
+        ViewModel.SetSelectionFromVim(TaskAtCursor());
+        GanttView.ScrollCursorIntoView();
+    }
 }
 
 /// Key-sequence Vim command engine.

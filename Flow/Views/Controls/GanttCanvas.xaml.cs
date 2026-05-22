@@ -154,6 +154,33 @@ public partial class GanttCanvas : UserControl
             Math.Clamp(cursorY - viewH / 2, 0, TimelineScrollViewer.ScrollableHeight));
     }
 
+    public void ScrollCursorIntoView()
+    {
+        double pps    = GetPixelsPerSecond();
+        double cellW  = Math.Max(GetGridStepInSeconds() * pps, 2);
+
+        double cursorLeft  = CursorTime * pps;
+        double cursorRight = cursorLeft + cellW;
+        double hOffset = TimelineScrollViewer.HorizontalOffset;
+        double viewW   = TimelineScrollViewer.ViewportWidth;
+
+        if (cursorLeft < hOffset)
+            TimelineScrollViewer.ScrollToHorizontalOffset(cursorLeft);
+        else if (cursorRight > hOffset + viewW)
+            TimelineScrollViewer.ScrollToHorizontalOffset(cursorRight - viewW);
+
+        int    li         = Math.Clamp(CursorLaneIndex, 0, Math.Max(0, (Lanes?.Count() ?? 1) - 1));
+        double laneTop    = li * LaneH;
+        double laneBottom = laneTop + LaneH;
+        double vOffset = TimelineScrollViewer.VerticalOffset;
+        double viewH   = TimelineScrollViewer.ViewportHeight;
+
+        if (laneTop < vOffset)
+            TimelineScrollViewer.ScrollToVerticalOffset(laneTop);
+        else if (laneBottom > vOffset + viewH)
+            TimelineScrollViewer.ScrollToVerticalOffset(laneBottom - viewH);
+    }
+
     public void StartRenameSelectedItem(bool discardOnCancel = false)
     {
         var item = SelectedItem;
