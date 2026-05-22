@@ -5,6 +5,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flow", "Flow\Flow.csproj", "{D389D81C-5B86-4DDE-92C5-B3E68F672BC7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flow.Tests", "Flow.Tests\Flow.Tests.csproj", "{A4598839-847A-4699-AFF0-C77FB17FEEBE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,18 @@ Global
 		{D389D81C-5B86-4DDE-92C5-B3E68F672BC7}.Release|x64.Build.0 = Release|Any CPU
 		{D389D81C-5B86-4DDE-92C5-B3E68F672BC7}.Release|x86.ActiveCfg = Release|Any CPU
 		{D389D81C-5B86-4DDE-92C5-B3E68F672BC7}.Release|x86.Build.0 = Release|Any CPU
+		{A4598839-847A-4699-AFF0-C77FB17FEEBE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A4598839-847A-4699-AFF0-C77FB17FEEBE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A4598839-847A-4699-AFF0-C77FB17FEEBE}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A4598839-847A-4699-AFF0-C77FB17FEEBE}.Debug|x64.Build.0 = Debug|Any CPU
+		{A4598839-847A-4699-AFF0-C77FB17FEEBE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A4598839-847A-4699-AFF0-C77FB17FEEBE}.Debug|x86.Build.0 = Debug|Any CPU
+		{A4598839-847A-4699-AFF0-C77FB17FEEBE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A4598839-847A-4699-AFF0-C77FB17FEEBE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A4598839-847A-4699-AFF0-C77FB17FEEBE}.Release|x64.ActiveCfg = Release|Any CPU
+		{A4598839-847A-4699-AFF0-C77FB17FEEBE}.Release|x64.Build.0 = Release|Any CPU
+		{A4598839-847A-4699-AFF0-C77FB17FEEBE}.Release|x86.ActiveCfg = Release|Any CPU
+		{A4598839-847A-4699-AFF0-C77FB17FEEBE}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
