@@ -112,6 +112,12 @@ public partial class GanttCanvas : UserControl
     private int    _createLaneIdx;
     private double _createCurrentMouseY;
 
+    // Pending drag state (actual drag starts only after threshold is exceeded)
+    private Point _pendingMouseDownPos;
+    private enum PendingDragType { None, Create, Move, Resize }
+    private PendingDragType _pendingDrag = PendingDragType.None;
+    private const double DragThreshold = 5.0;
+
     // Lane reorder state
     private int    _reorderSourceLane  = -1;
     private int    _reorderDropLane    = -1;
@@ -1497,11 +1503,19 @@ public partial class GanttCanvas : UserControl
                 return;
             }
 
-            _createStartTime = SnapToSeconds(Math.Max(0, pos.X / GetPixelsPerSecond()));
-            _createCurrentDuration = 0;
+            // Click = select cell; drag = create task
+            // Floor (not round) so clicking anywhere inside a cell selects that cell
+            double gridStep = GetGridStepInSeconds();
+            double startTime = NormalizeTimelineValue(
+                Math.Floor(Math.Max(0, pos.X / GetPixelsPerSecond()) / gridStep) * gridStep);
+            CursorTime = startTime;
+            CursorLaneIndex = laneIdx;
+            SelectedItem = null;
+
+            _createStartTime = startTime;
             _createLaneIdx = laneIdx;
-            _createCurrentMouseY = pos.Y;
-            _drag = DragMode.Create;
+            _pendingMouseDownPos = pos;
+            _pendingDrag = PendingDragType.Create;
             RootCanvas.CaptureMouse();
             e.Handled = true;
             return;
@@ -1522,10 +1536,10 @@ public partial class GanttCanvas : UserControl
         _dragOriginStart    = item.StartTime;
         _dragOriginDuration = item.Duration;
         _dragLaneIdx        = GetLaneIndex(pos.Y);
+        _pendingMouseDownPos = pos;
 
         if (_barRects.TryGetValue(item.Id, out r) && pos.X >= r.Right - ResizeW)
         {
-            _drag = DragMode.Resize;
             double itemEnd = item.StartTime + item.Duration;
             _dragLaneOriginalStarts = ItemsSource?
                 .Where(i => i.LaneId == item.LaneId && i.Id != item.Id &&
@@ -1533,7 +1547,6 @@ public partial class GanttCanvas : UserControl
                 .ToDictionary(i => i.Id, i => i.StartTime)
                 ?? new Dictionary<Guid, double>();
 
-            // Compute which successive tasks are flush against the anchor (touching chain)
             _dragTouchingChain = new List<ItemViewModel>();
             double chainFront = itemEnd;
             foreach (var t in (ItemsSource ?? Enumerable.Empty<ItemViewModel>())
@@ -1548,23 +1561,55 @@ public partial class GanttCanvas : UserControl
                     chainFront = t.StartTime + t.Duration;
                 }
             }
+
+            _pendingDrag = PendingDragType.Resize;
         }
         else
         {
-            _drag = DragMode.Move;
             _dragMouseOffsetX = _barRects.TryGetValue(item.Id, out var barRect)
                 ? (pos.X - barRect.Left) / GetPixelsPerSecond()
                 : 0;
+            _pendingDrag = PendingDragType.Move;
         }
 
         RootCanvas.CaptureMouse();
         e.Handled = true;
     }
 
+    private void StartPendingDrag()
+    {
+        switch (_pendingDrag)
+        {
+            case PendingDragType.Create:
+                _createCurrentDuration = 0;
+                _createCurrentMouseY = _pendingMouseDownPos.Y;
+                _drag = DragMode.Create;
+                break;
+            case PendingDragType.Move:
+                _drag = DragMode.Move;
+                break;
+            case PendingDragType.Resize:
+                _drag = DragMode.Resize;
+                break;
+        }
+        _pendingDrag = PendingDragType.None;
+    }
+
     private void OnMouseMove(object sender, MouseEventArgs e)
     {
         var pos = e.GetPosition(RootCanvas);
         UpdateTimelineCursor(pos);
+
+        // Promote pending drag to active once the mouse moves past the threshold
+        if (_pendingDrag != PendingDragType.None)
+        {
+            double dx = pos.X - _pendingMouseDownPos.X;
+            double dy = pos.Y - _pendingMouseDownPos.Y;
+            if (dx * dx + dy * dy >= DragThreshold * DragThreshold)
+                StartPendingDrag();
+            else
+                return;
+        }
 
         if (_drag == DragMode.Create)
         {
@@ -1642,6 +1687,16 @@ public partial class GanttCanvas : UserControl
 
     private void OnMouseUp(object sender, MouseButtonEventArgs e)
     {
+        if (_pendingDrag != PendingDragType.None)
+        {
+            // Mouse released before drag threshold — treat as a plain click
+            _pendingDrag = PendingDragType.None;
+            _dragItem = null;
+            if (RootCanvas.IsMouseCaptured) RootCanvas.ReleaseMouseCapture();
+            e.Handled = true;
+            return;
+        }
+
         CommitDrag();
         e.Handled = true;
     }
@@ -1743,6 +1798,7 @@ public partial class GanttCanvas : UserControl
             _dragItem.StartTime = NormalizeTimelineValue(Math.Max(0, _dragItem.StartTime));
         }
 
+        _pendingDrag = PendingDragType.None;
         _dragToNewLane = false;
         _drag = DragMode.None;
         _dragItem = null;
