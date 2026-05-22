@@ -424,15 +424,17 @@ public partial class GanttCanvas : UserControl
             }, CursorTime * pps, cl * LaneH);
         }
 
+        double lanesH = nLanes * LaneH;
+
         // 3. Minor grid lines
         foreach (double t in EnumerateMinorTicks(total))
         {
-            Add(VLine(t * ppu, 0, totalH, gridMinor, 0.5), 0, 0);
+            Add(VLine(t * ppu, 0, lanesH, gridMinor, 0.5), 0, 0);
         }
 
         // 4. Major grid lines
         foreach (double t in EnumerateMajorTicks(total))
-            Add(VLine(t * ppu, 0, totalH, t == 0 ? divider : gridMajor, t == 0 ? 1 : 0.8), 0, 0);
+            Add(VLine(t * ppu, 0, lanesH, t == 0 ? divider : gridMajor, t == 0 ? 1 : 0.8), 0, 0);
 
         // 5. Horizontal lane separators
         for (int i = 0; i <= nLanes; i++)
@@ -975,7 +977,7 @@ public partial class GanttCanvas : UserControl
             Height = AddLaneZoneH,
             Background = active
                 ? palette.AccentGhost
-                : palette.AccentFaint,
+                : Brushes.Transparent,
             BorderBrush = active ? palette.Accent : palette.Border,
             BorderThickness = new Thickness(0, 1, 0, 0),
             Cursor = AddLaneFunc != null ? Cursors.Hand : Cursors.Arrow,
