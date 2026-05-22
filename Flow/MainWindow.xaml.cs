@@ -442,7 +442,16 @@ public partial class MainWindow : Window
     {
         if (DataContext is not MainViewModel vm) return;
         bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
-        if (_vim.HandleKey(e.Key, shift, new VimContext(vm, GanttView, _vimClipboard)))
+        Key key = e.Key == Key.ImeProcessed ? e.ImeProcessedKey : e.Key;
+        if (_vim.HandleKey(key, shift, new VimContext(vm, GanttView, _vimClipboard)))
+            e.Handled = true;
+    }
+
+    protected override void OnPreviewTextInput(TextCompositionEventArgs e)
+    {
+        base.OnPreviewTextInput(e);
+        // IMEがONのとき、テキスト入力外ならIME変換結果を破棄する
+        if (!IsTextInputFocused() && !GanttView.IsEditing)
             e.Handled = true;
     }
 
