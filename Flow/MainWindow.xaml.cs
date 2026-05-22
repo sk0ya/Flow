@@ -16,9 +16,7 @@ public partial class MainWindow : Window
     private double   _savedSidebarWidth = 270.0;
 
     // ── Vim state ─────────────────────────────────────────────────────────
-    private readonly VimEngine    _vim          = new();
-    private readonly VimClipboard _vimClipboard = new();
-    private LaneViewModel?        _pendingNewLane;
+    private readonly VimController _vim;
 
     public MainWindow() : this(null)
     {
@@ -28,36 +26,18 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         var vm = new MainViewModel(startupProjectPath);
+        _vim = new VimController(vm, GanttView);
         DataContext = vm;
         GanttView.AddLaneFunc          = vm.AddNewLane;
         GanttView.AddItemAtFunc        = vm.AddNewItemAt;
         GanttView.ReorderLanesCallback = vm.ReorderLane;
 
-        GanttView.DiscardItemFunc = item =>
-        {
-            vm.DiscardNewItem(item);
-            if (_pendingNewLane != null)
-            {
-                vm.Lanes.Remove(_pendingNewLane);
-                _pendingNewLane = null;
-            }
-        };
+        GanttView.DiscardItemFunc = _vim.HandleDiscardedNewItem;
 
         GanttView.ItemCreatedCommittedFunc = item =>
         {
-            if (_pendingNewLane != null)
-            {
-                int laneIdx = vm.Lanes.IndexOf(_pendingNewLane);
-                vm.UndoRedo.Push(new CompositeCommand([
-                    new AddLaneCommand(vm.Lanes, _pendingNewLane, laneIdx),
-                    new AddItemCommand(vm.Items, item),
-                ]));
-                _pendingNewLane = null;
-            }
-            else
-            {
+            if (!_vim.TryCommitPendingNewItem(item))
                 vm.UndoRedo.Push(new AddItemCommand(vm.Items, item));
-            }
         };
 
         GanttView.ItemRenamedFunc = (item, oldName, newName) =>
@@ -70,8 +50,6 @@ public partial class MainWindow : Window
         };
         vm.ProjectLoaded        += (_, _) => GanttView.RequestAutoFitLaneHeader();
         vm.StartRenameRequested += (_, _) => GanttView.StartRenameSelectedItem(discardOnCancel: true);
-
-        InitVim();
     }
 
     private void UpdateSidebarColumns(MainViewModel vm)
@@ -277,10 +255,8 @@ public partial class MainWindow : Window
         }
 
         // Visual mode: Escape exits visual mode (without deselecting)
-        if (e.Key == Key.Escape && _currentVimMode != VimMode.Normal)
+        if (e.Key == Key.Escape && _vim.TryExitMode())
         {
-            if (DataContext is MainViewModel vmVis)
-                ExitVisualMode(vmVis);
             e.Handled = true;
             return;
         }
@@ -300,172 +276,11 @@ public partial class MainWindow : Window
     private static bool IsTextInputFocused() =>
         Keyboard.FocusedElement is TextBox or PasswordBox;
 
-    private void InitVim()
-    {
-        _vim.Init();
-
-        // Navigation
-        _vim.Register("h",   VimCommands.Left);
-        _vim.Register("l",   VimCommands.Right);
-        _vim.Register("k",   VimCommands.Up);
-        _vim.Register("j",   VimCommands.Down);
-        _vim.Register("gg",  VimCommands.GoFirst);
-        _vim.Register("G",   VimCommands.GoLast);
-        _vim.Register("^",   VimCommands.GoFirstTask);
-        _vim.Register("w",   VimCommands.WordForward);
-        _vim.Register("b",   VimCommands.WordBackward);
-        _vim.Register("e",   VimCommands.WordEnd);
-        _vim.Register("0",   VimCommands.GoLineStart);
-        _vim.Register("$",   VimCommands.GoLineEnd);
-
-        // Duration / move
-        _vim.Register("+",   VimCommands.DurationGrow);
-        _vim.Register("-",   VimCommands.DurationShrink);
-        _vim.Register(">",   VimCommands.MoveTaskRight);
-        _vim.Register("<",   VimCommands.MoveTaskLeft);
-
-        // View
-        _vim.Register("zz",  ctx => ctx.GanttView.ScrollCursorIntoCenter());
-
-        // Edit
-        _vim.Register("i",   VimCommands.Rename);
-        _vim.Register("a",   ctx => VimAddTask(ctx, VimAddMode.After));
-        _vim.Register("I",   ctx => VimAddTask(ctx, VimAddMode.Start));
-        _vim.Register("o",   ctx => VimAddTask(ctx, VimAddMode.LaneBelow));
-        _vim.Register("O",   ctx => VimAddTask(ctx, VimAddMode.LaneAbove));
-
-        // Undo
-        _vim.Register("u",   ctx => ctx.ViewModel.Undo());
-
-        // Visual mode
-        _vim.Register("v",   ctx => {
-            _currentVimMode               = VimMode.Visual;
-            ctx.ViewModel.IsVisualMode    = true;
-            ctx.ViewModel.IsVisualLineMode = false;
-            ctx.ViewModel.VisualModeLabel  = "-- VISUAL --";
-            ctx.SyncSelection();
-        });
-        _vim.Register("V",   ctx => {
-            _currentVimMode                = VimMode.VisualLine;
-            ctx.ViewModel.IsVisualMode     = true;
-            ctx.ViewModel.IsVisualLineMode = true;
-            ctx.ViewModel.VisualAnchorLane = ctx.ViewModel.CursorLaneIndex;
-            ctx.ViewModel.VisualModeLabel  = "-- VISUAL LINE --";
-        });
-
-        // Delete / yank / paste
-        _vim.Register("x",   VimCommands.DeleteTask);
-        _vim.Register("diw", VimCommands.DeleteTask);
-        _vim.Register("yiw", VimCommands.YankTask);
-        _vim.Register("yy",  VimCommands.YankLane);
-        _vim.Register("dd",  VimCommands.DeleteLane);
-        _vim.Register("p",   VimCommands.PasteAfter);
-        _vim.Register("P",   VimCommands.PasteBefore);
-    }
-
     private void HandleVimKey(KeyEventArgs e)
     {
-        if (DataContext is not MainViewModel vm) return;
-        bool ctrl  = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
-        bool shift = (Keyboard.Modifiers & ModifierKeys.Shift)   != 0;
         Key key = e.Key == Key.ImeProcessed ? e.ImeProcessedKey : e.Key;
-
-        if (ctrl && key == Key.R)
-        {
-            vm.Redo();
+        if (_vim.HandleKey(key, Keyboard.Modifiers))
             e.Handled = true;
-            return;
-        }
-
-        var ctx = new VimContext(vm, GanttView, _vimClipboard);
-
-        if (_currentVimMode == VimMode.Visual)
-        {
-            if (HandleVisualModeKey(key, shift, ctx, vm))
-                e.Handled = true;
-            return;
-        }
-
-        if (_vim.HandleKey(key, shift, ctx))
-            e.Handled = true;
-    }
-
-    private bool HandleVisualModeKey(Key key, bool shift, VimContext ctx, MainViewModel vm)
-    {
-        switch (key)
-        {
-            case Key.D:
-                if (_currentVimMode == VimMode.VisualLine)
-                    DeleteLaneRange(ctx, vm);
-                else
-                    VimCommands.DeleteTask(ctx);
-                ExitVisualMode(vm);
-                return true;
-            case Key.Y:
-                if (_currentVimMode == VimMode.VisualLine)
-                    VimCommands.YankLane(ctx);
-                else
-                    VimCommands.YankTask(ctx);
-                ExitVisualMode(vm);
-                return true;
-            // V mode: j/k extend lane selection range
-            case Key.K when _currentVimMode == VimMode.VisualLine:
-                if (vm.CursorLaneIndex > 0) { vm.CursorLaneIndex--; ctx.GanttView.ScrollCursorIntoView(); }
-                return true;
-            case Key.J when _currentVimMode == VimMode.VisualLine:
-                if (vm.CursorLaneIndex < ctx.LaneCount - 1) { vm.CursorLaneIndex++; ctx.GanttView.ScrollCursorIntoView(); }
-                return true;
-            // V mode: h/l are no-ops (lane selection doesn't change horizontally)
-            case Key.H when _currentVimMode == VimMode.VisualLine:
-            case Key.L when _currentVimMode == VimMode.VisualLine:
-                return true;
-            default:
-                return _vim.HandleKey(key, shift, ctx);
-        }
-    }
-
-
-    private void ExitVisualMode(MainViewModel vm)
-    {
-        _currentVimMode        = VimMode.Normal;
-        vm.IsVisualMode        = false;
-        vm.IsVisualLineMode    = false;
-        vm.VisualAnchorLane    = -1;
-        vm.VisualModeLabel     = "";
-    }
-
-    private static void DeleteLaneRange(VimContext ctx, MainViewModel vm)
-    {
-        int anchor   = Math.Clamp(vm.VisualAnchorLane, 0, vm.Lanes.Count - 1);
-        int cursor   = Math.Clamp(vm.CursorLaneIndex,  0, vm.Lanes.Count - 1);
-        int selStart = Math.Min(anchor, cursor);
-        int selEnd   = Math.Max(anchor, cursor);
-
-        var lanesToDelete = Enumerable.Range(selStart, selEnd - selStart + 1)
-            .Select(i => vm.Lanes.ElementAtOrDefault(i))
-            .Where(l => l != null)
-            .ToList();
-
-        var cmds = new List<IUndoableCommand>();
-        foreach (var lane in lanesToDelete)
-        {
-            foreach (var item in vm.Items.Where(i => i.LaneId == lane!.Id).ToList())
-            {
-                if (vm.SelectedItem?.Id == item.Id) vm.SelectedItem = null;
-                vm.Items.Remove(item);
-                cmds.Add(new RemoveItemCommand(vm.Items, item));
-            }
-        }
-        foreach (var lane in lanesToDelete)
-        {
-            if (vm.Lanes.Count <= 1) break;
-            int idx = vm.Lanes.IndexOf(lane!);
-            vm.Lanes.Remove(lane!);
-            cmds.Add(new RemoveLaneCommand(vm.Lanes, lane!, idx));
-        }
-        vm.Analyze();
-        vm.UndoRedo.Push(new CompositeCommand(cmds));
-        vm.CursorLaneIndex = Math.Min(selStart, vm.Lanes.Count - 1);
     }
 
     protected override void OnPreviewTextInput(TextCompositionEventArgs e)
@@ -474,59 +289,6 @@ public partial class MainWindow : Window
         // IMEがONのとき、テキスト入力外ならIME変換結果を破棄する
         if (!IsTextInputFocused() && !GanttView.IsEditing)
             e.Handled = true;
-    }
-
-    private enum VimAddMode { After, Start, LaneBelow, LaneAbove }
-    private enum VimMode    { Normal, Visual, VisualLine }
-    private VimMode _currentVimMode = VimMode.Normal;
-
-    private void VimAddTask(VimContext ctx, VimAddMode mode)
-    {
-        var vm = ctx.ViewModel;
-        Guid   laneId;
-        double startTime;
-
-        switch (mode)
-        {
-            case VimAddMode.After:
-            {
-                laneId    = ctx.CursorLaneId();
-                var cur   = ctx.TaskAtCursor();
-                startTime = cur != null ? cur.StartTime + cur.Duration : vm.CursorTime + ctx.GridStep;
-                break;
-            }
-            case VimAddMode.Start:
-                laneId    = ctx.CursorLaneId();
-                startTime = 0;
-                break;
-            case VimAddMode.LaneBelow:
-            {
-                int idx = vm.CursorLaneIndex;
-                if (idx + 1 < vm.Lanes.Count)
-                {
-                    laneId = vm.Lanes[idx + 1].Id;
-                }
-                else
-                {
-                    var newLane = vm.InsertLaneAfter(idx);
-                    laneId          = newLane.Id;
-                    _pendingNewLane = newLane;
-                }
-                startTime = vm.CursorTime;
-                break;
-            }
-            case VimAddMode.LaneAbove:
-                if (vm.CursorLaneIndex <= 0) return;
-                laneId    = vm.Lanes[vm.CursorLaneIndex - 1].Id;
-                startTime = vm.CursorTime;
-                break;
-            default:
-                return;
-        }
-
-        if (laneId == Guid.Empty) return;
-        var newItem = vm.AddNewItemAt(laneId, startTime);
-        if (newItem != null) ctx.GanttView.StartRenameSelectedItem(discardOnCancel: true);
     }
 
     // ── SelectItemCommand relay (click in list = select) ─────────────────

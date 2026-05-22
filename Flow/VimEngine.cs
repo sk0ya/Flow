@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -8,6 +9,13 @@ using Flow.ViewModels;
 using Flow.Views.Controls;
 
 namespace Flow;
+
+public enum VimMode
+{
+    Normal,
+    Visual,
+    VisualLine,
+}
 
 public sealed class VimClipboard
 {
@@ -32,8 +40,9 @@ public sealed class VimClipboard
     }
 }
 
-public sealed class VimContext(MainViewModel viewModel, GanttCanvas ganttView, VimClipboard clipboard)
+public sealed class VimContext(VimEngine engine, MainViewModel viewModel, GanttCanvas ganttView, VimClipboard clipboard)
 {
+    public VimEngine     Engine    { get; } = engine;
     public MainViewModel ViewModel { get; } = viewModel;
     public GanttCanvas   GanttView { get; } = ganttView;
     public VimClipboard  Clipboard { get; } = clipboard;
@@ -62,68 +71,31 @@ public sealed class VimContext(MainViewModel viewModel, GanttCanvas ganttView, V
     }
 }
 
-/// Key-sequence Vim command engine.
-/// Register commands via Register(), then route WPF key events through HandleKey().
-public sealed class VimEngine
+internal sealed class VimCommandRegistry
 {
-    private readonly Dictionary<string, Action<VimContext>> _commands =
-        new(StringComparer.Ordinal);
-
-    private string           _buffer     = "";
-    private DispatcherTimer? _clearTimer;
-
-    public void Init()
-    {
-        _clearTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000) };
-        _clearTimer.Tick += (_, _) => ClearBuffer();
-    }
+    private readonly Dictionary<string, Action<VimContext>> _commands = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _prefixes = new(StringComparer.Ordinal);
 
     public void Register(string sequence, Action<VimContext> handler)
-        => _commands[sequence] = handler;
-
-    public bool HandleKey(Key key, bool shift, VimContext ctx)
     {
-        string? ch = KeyToChar(key, shift);
-        if (ch == null) return false;
+        ArgumentException.ThrowIfNullOrWhiteSpace(sequence);
+        ArgumentNullException.ThrowIfNull(handler);
 
-        string candidate = _buffer + ch;
-
-        // Exact match → execute
-        if (_commands.TryGetValue(candidate, out var cmd))
-        {
-            ClearBuffer();
-            cmd(ctx);
-            return true;
-        }
-
-        // Prefix of a registered sequence → buffer and wait
-        if (_commands.Keys.Any(k =>
-                k.StartsWith(candidate, StringComparison.Ordinal) && k.Length > candidate.Length))
-        {
-            _buffer = candidate;
-            _clearTimer?.Stop();
-            _clearTimer?.Start();
-            return true;
-        }
-
-        // No continuation — clear buffer and retry as a single-char command
-        ClearBuffer();
-        if (_commands.TryGetValue(ch, out var fallback))
-        {
-            fallback(ctx);
-            return true;
-        }
-
-        return false;
+        _commands[sequence] = handler;
+        for (int i = 1; i < sequence.Length; i++)
+            _prefixes.Add(sequence[..i]);
     }
 
-    private void ClearBuffer()
-    {
-        _buffer = "";
-        _clearTimer?.Stop();
-    }
+    public bool TryGetCommand(string sequence, [NotNullWhen(true)] out Action<VimContext>? handler)
+        => _commands.TryGetValue(sequence, out handler);
 
-    private static string? KeyToChar(Key key, bool shift) => key switch
+    public bool HasPrefix(string sequence)
+        => _prefixes.Contains(sequence);
+}
+
+internal static class VimKeyNotation
+{
+    public static string? FromKey(Key key, bool shift) => key switch
     {
         Key.H when !shift => "h",
         Key.L when !shift => "l",
@@ -159,4 +131,114 @@ public sealed class VimEngine
         Key.OemComma  when  shift => "<",
         _ => null,
     };
+}
+
+public sealed class VimEngine
+{
+    private readonly Dictionary<VimMode, VimCommandRegistry> _registries = new()
+    {
+        [VimMode.Normal] = new(),
+        [VimMode.Visual] = new(),
+        [VimMode.VisualLine] = new(),
+    };
+
+    private readonly DispatcherTimer _clearTimer;
+    private string _buffer = "";
+
+    public VimEngine(TimeSpan? bufferTimeout = null)
+    {
+        _clearTimer = new DispatcherTimer
+        {
+            Interval = bufferTimeout ?? TimeSpan.FromMilliseconds(1000),
+        };
+        _clearTimer.Tick += (_, _) => ClearPendingInput();
+    }
+
+    public VimMode Mode { get; private set; } = VimMode.Normal;
+
+    public event Action<VimMode>? ModeChanged;
+
+    public void Register(string sequence, Action<VimContext> handler)
+        => Register(VimMode.Normal, sequence, handler);
+
+    public void Register(VimMode mode, string sequence, Action<VimContext> handler)
+        => _registries[mode].Register(sequence, handler);
+
+    public bool HandleKey(Key key, bool shift, VimContext context)
+    {
+        string? token = VimKeyNotation.FromKey(key, shift);
+        return token != null && TryDispatch(token, context);
+    }
+
+    public bool TryExitToNormalMode()
+    {
+        if (Mode == VimMode.Normal)
+        {
+            ClearPendingInput();
+            return false;
+        }
+
+        SetMode(VimMode.Normal);
+        return true;
+    }
+
+    public void SetMode(VimMode mode)
+    {
+        if (Mode == mode)
+        {
+            ClearPendingInput();
+            return;
+        }
+
+        Mode = mode;
+        ClearPendingInput();
+        ModeChanged?.Invoke(mode);
+    }
+
+    public void ClearPendingInput()
+    {
+        _buffer = "";
+        _clearTimer.Stop();
+    }
+
+    private bool TryDispatch(string token, VimContext context)
+    {
+        string candidate = _buffer + token;
+
+        foreach (var registry in EnumerateActiveRegistries())
+        {
+            if (!registry.TryGetCommand(candidate, out var command)) continue;
+            ClearPendingInput();
+            command(context);
+            return true;
+        }
+
+        foreach (var registry in EnumerateActiveRegistries())
+        {
+            if (!registry.HasPrefix(candidate)) continue;
+            _buffer = candidate;
+            _clearTimer.Stop();
+            _clearTimer.Start();
+            return true;
+        }
+
+        ClearPendingInput();
+
+        foreach (var registry in EnumerateActiveRegistries())
+        {
+            if (!registry.TryGetCommand(token, out var fallback)) continue;
+            fallback(context);
+            return true;
+        }
+
+        return false;
+    }
+
+    private IEnumerable<VimCommandRegistry> EnumerateActiveRegistries()
+    {
+        if (Mode != VimMode.Normal)
+            yield return _registries[Mode];
+
+        yield return _registries[VimMode.Normal];
+    }
 }
