@@ -71,6 +71,8 @@ public partial class MainViewModel : ObservableObject
     private ItemViewModel? _deletedItem;
     private bool _suppressCursorSnap;
 
+    public UndoRedoManager UndoRedo { get; } = new();
+
     [ObservableProperty] private string? _cellDurationError;
 
     public ObservableCollection<CategoryViewModel>  Categories      { get; } = new();
@@ -282,11 +284,11 @@ public partial class MainViewModel : ObservableObject
         Lanes.Move(fromIndex, toIndex);
     }
 
-    public Guid InsertLaneAfter(int index)
+    public LaneViewModel InsertLaneAfter(int index)
     {
         var lane = new LaneViewModel(NextLaneName());
         Lanes.Insert(Math.Clamp(index + 1, 0, Lanes.Count), lane);
-        return lane.Id;
+        return lane;
     }
 
     public void DeleteLaneWithItems(LaneViewModel lane)
@@ -332,11 +334,13 @@ public partial class MainViewModel : ObservableObject
         return vm;
     }
 
-    public void PasteLane(Lane laneTemplate, List<SequenceItem> itemTemplates, int afterIndex)
+    public (LaneViewModel lane, List<ItemViewModel> items) PasteLane(
+        Lane laneTemplate, List<SequenceItem> itemTemplates, int afterIndex)
     {
         var lane = new LaneViewModel(laneTemplate.Name);
         Lanes.Insert(Math.Clamp(afterIndex + 1, 0, Lanes.Count), lane);
 
+        var added = new List<ItemViewModel>();
         foreach (var t in itemTemplates.OrderBy(i => i.StartTime))
         {
             var model = new SequenceItem
@@ -354,7 +358,9 @@ public partial class MainViewModel : ObservableObject
             var vm = new ItemViewModel(model);
             Subscribe(vm);
             Items.Add(vm);
+            added.Add(vm);
         }
+        return (lane, added);
     }
 
     private string NextLaneName()
@@ -461,6 +467,9 @@ public partial class MainViewModel : ObservableObject
     {
         if (SelectedItem != null) _ = DeleteItemCommand.ExecuteAsync(SelectedItem);
     }
+
+    public void Undo() => UndoRedo.Undo();
+    public void Redo() => UndoRedo.Redo();
 
     // ── File commands ─────────────────────────────────────────────────────
 

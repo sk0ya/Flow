@@ -143,6 +143,7 @@ public sealed class VimEngine
         Key.E when !shift => "e",
         Key.G when !shift => "g",
         Key.G when  shift => "G",
+        Key.U when !shift => "u",
         Key.X when !shift => "x",
         Key.Z when !shift => "z",
         Key.D0 when !shift => "0",

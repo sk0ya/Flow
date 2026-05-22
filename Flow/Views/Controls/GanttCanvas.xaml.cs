@@ -136,12 +136,17 @@ public partial class GanttCanvas : UserControl
     private ItemViewModel? _renamingItem;
     private TextBox?       _taskRenameBox;
     private bool           _discardRenamingItemOnCancel;
+    private string         _renamingItemOldName = "";
 
     // Callbacks set in code-behind
     public Func<Guid>?       AddLaneFunc          { get; set; }
     public Func<Guid, double, ItemViewModel?>? AddItemAtFunc { get; set; }
     public Action<ItemViewModel>? DiscardItemFunc { get; set; }
     public Action<int, int>? ReorderLanesCallback { get; set; }
+
+    // Undo/redo hooks: fired after rename is committed (not cancelled)
+    public Action<ItemViewModel>?                       ItemCreatedCommittedFunc { get; set; }
+    public Action<ItemViewModel, string, string>?       ItemRenamedFunc          { get; set; }
 
     public bool IsEditing => IsRenaming;
 
@@ -1150,7 +1155,8 @@ public partial class GanttCanvas : UserControl
     {
         if (!_barRects.TryGetValue(item.Id, out var rect)) return;
 
-        _renamingItem = item;
+        _renamingItem        = item;
+        _renamingItemOldName = item.Name;
         _discardRenamingItemOnCancel = discardOnCancel;
 
         _taskRenameBox = new TextBox
@@ -1193,8 +1199,14 @@ public partial class GanttCanvas : UserControl
 
         if (!cancel)
         {
-            var name = taskRenameBox.Text.Trim();
-            if (!string.IsNullOrEmpty(name)) item.Name = name;
+            var newName = taskRenameBox.Text.Trim();
+            string oldName = _renamingItemOldName;
+            if (!string.IsNullOrEmpty(newName)) item.Name = newName;
+
+            if (discardOnCancel)
+                ItemCreatedCommittedFunc?.Invoke(item);
+            else if (!string.IsNullOrEmpty(newName) && newName != oldName)
+                ItemRenamedFunc?.Invoke(item, oldName, item.Name);
         }
 
         if (taskRenameBox.Parent is Panel panel)
