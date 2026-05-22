@@ -1802,7 +1802,7 @@ public partial class GanttCanvas : UserControl
         {
             var lanes = Lanes?.ToList() ?? new List<LaneViewModel>();
             int finalLane = GetLaneIndex(_createCurrentMouseY);
-            if (finalLane >= 0 && finalLane < lanes.Count && _createCurrentDuration > 0 && AddItemAtFunc != null)
+            if (finalLane == _createLaneIdx && finalLane >= 0 && finalLane < lanes.Count && _createCurrentDuration > 0 && AddItemAtFunc != null)
             {
                 var newItem = AddItemAtFunc(lanes[_createLaneIdx].Id, _createStartTime);
                 if (newItem != null)
