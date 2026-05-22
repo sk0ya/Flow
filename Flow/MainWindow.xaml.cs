@@ -281,6 +281,16 @@ public partial class MainWindow : Window
             if (ctx.ViewModel.CursorLaneIndex < ctx.LaneCount - 1) { ctx.ViewModel.CursorLaneIndex++; ctx.SyncSelection(); }
         });
 
+        // ── Lane jump ────────────────────────────────────────────────────
+        _vim.Register("gg", ctx => { ctx.ViewModel.CursorLaneIndex = 0;                    ctx.SyncSelection(); });
+        _vim.Register("G",  ctx => { ctx.ViewModel.CursorLaneIndex = ctx.LaneCount - 1;    ctx.SyncSelection(); });
+        _vim.Register("^",  ctx => {   // first task in current lane
+            var first = ctx.ViewModel.Items
+                .Where(i => i.LaneId == ctx.CursorLaneId())
+                .OrderBy(i => i.StartTime).FirstOrDefault();
+            if (first != null) { ctx.ViewModel.CursorTime = first.StartTime; ctx.ViewModel.SetSelectionFromVim(first); }
+        });
+
         // ── Task-jump navigation ──────────────────────────────────────────
         _vim.Register("w", ctx => {   // next task start (crosses lanes)
             var vm    = ctx.ViewModel;
@@ -355,6 +365,33 @@ public partial class MainWindow : Window
             }
         });
 
+        // ── Duration / Move task ─────────────────────────────────────────
+        _vim.Register("+", ctx => {   // duration +1 step
+            var task = ctx.TaskAtCursor();
+            if (task != null) task.Duration += ctx.GridStep;
+        });
+        _vim.Register("-", ctx => {   // duration -1 step
+            var task = ctx.TaskAtCursor();
+            if (task != null) task.Duration = Math.Max(ctx.GridStep, task.Duration - ctx.GridStep);
+        });
+        _vim.Register(">", ctx => {   // move task right
+            var task = ctx.TaskAtCursor();
+            if (task == null) return;
+            task.StartTime                  += ctx.GridStep;
+            ctx.ViewModel.CursorTime        += ctx.GridStep;
+            ctx.ViewModel.SetSelectionFromVim(task);
+        });
+        _vim.Register("<", ctx => {   // move task left
+            var task = ctx.TaskAtCursor();
+            if (task == null) return;
+            task.StartTime            = Math.Max(0, task.StartTime - ctx.GridStep);
+            ctx.ViewModel.CursorTime  = task.StartTime;
+            ctx.ViewModel.SetSelectionFromVim(task);
+        });
+
+        // ── View ──────────────────────────────────────────────────────────
+        _vim.Register("zz", ctx => ctx.GanttView.ScrollCursorIntoCenter());
+
         // ── Editing ───────────────────────────────────────────────────────
         _vim.Register("i", ctx => {   // rename at cursor / create+rename on empty cell
             var task = ctx.TaskAtCursor();
@@ -367,6 +404,10 @@ public partial class MainWindow : Window
                 var newItem = ctx.ViewModel.AddNewItemAt(laneId, ctx.ViewModel.CursorTime);
                 if (newItem != null) ctx.GanttView.StartRenameSelectedItem(discardOnCancel: true);
             }
+        });
+        _vim.Register("x",   ctx => {   // delete task at cursor
+            var task = ctx.TaskAtCursor();
+            if (task != null) { ctx.ViewModel.SelectedItem = task; ctx.ViewModel.DeleteSelectedItemCommand.Execute(null); }
         });
         _vim.Register("a",   ctx => VimAddTask(ctx, VimAddMode.After));
         _vim.Register("I",   ctx => VimAddTask(ctx, VimAddMode.Start));

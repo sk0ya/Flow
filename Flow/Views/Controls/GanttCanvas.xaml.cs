@@ -139,6 +139,21 @@ public partial class GanttCanvas : UserControl
 
     public bool IsEditing => IsRenaming;
 
+    public void ScrollCursorIntoCenter()
+    {
+        double pps    = GetPixelsPerSecond();
+        double cursorX = CursorTime * pps;
+        double cursorY = Math.Clamp(CursorLaneIndex, 0, Math.Max(0, (Lanes?.Count() ?? 1) - 1)) * LaneH + LaneH / 2.0;
+
+        double viewW = TimelineScrollViewer.ViewportWidth;
+        TimelineScrollViewer.ScrollToHorizontalOffset(
+            Math.Clamp(cursorX - viewW / 2, 0, TimelineScrollViewer.ScrollableWidth));
+
+        double viewH = TimelineScrollViewer.ViewportHeight;
+        TimelineScrollViewer.ScrollToVerticalOffset(
+            Math.Clamp(cursorY - viewH / 2, 0, TimelineScrollViewer.ScrollableHeight));
+    }
+
     public void StartRenameSelectedItem(bool discardOnCancel = false)
     {
         var item = SelectedItem;
