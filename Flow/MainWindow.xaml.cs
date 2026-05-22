@@ -39,7 +39,8 @@ public partial class MainWindow : Window
             if (e.PropertyName == nameof(MainViewModel.IsSidebarOpen))
                 UpdateSidebarColumns(vm);
         };
-        vm.ProjectLoaded += (_, _) => GanttView.RequestAutoFitLaneHeader();
+        vm.ProjectLoaded        += (_, _) => GanttView.RequestAutoFitLaneHeader();
+        vm.StartRenameRequested += (_, _) => GanttView.StartRenameSelectedItem(discardOnCancel: true);
 
         InitVim();
     }

@@ -384,9 +384,6 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void AddItem()
     {
-        var name = NewItemName.Trim();
-        if (string.IsNullOrEmpty(name)) return;
-
         var laneId = SelectedItem?.LaneId ?? Lanes.FirstOrDefault()?.Id ?? Guid.Empty;
         if (laneId == Guid.Empty) return;
 
@@ -397,8 +394,16 @@ public partial class MainViewModel : ObservableObject
                    .DefaultIfEmpty(0)
                    .Max();
 
+        var name = NewItemName.Trim();
+        if (string.IsNullOrEmpty(name))
+        {
+            AddNewItemAt(laneId, startTime);
+            StartRenameRequested?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
         CreateItem(name, laneId, startTime);
-        NewItemName  = "";
+        NewItemName = "";
     }
 
     public ItemViewModel? AddNewItemAt(Guid laneId, double proposedStartTime)
@@ -612,6 +617,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     public event EventHandler? ProjectLoaded;
+    public event EventHandler? StartRenameRequested;
 
     private void ApplyProject(SequenceProject project, string filePath)
     {
