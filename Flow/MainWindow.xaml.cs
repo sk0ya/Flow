@@ -276,6 +276,15 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Visual mode: Escape exits visual mode (without deselecting)
+        if (e.Key == Key.Escape && _currentVimMode != VimMode.Normal)
+        {
+            if (DataContext is MainViewModel vmVis)
+                ExitVisualMode(vmVis);
+            e.Handled = true;
+            return;
+        }
+
         // Global shortcut: Escape deselects
         if (e.Key == Key.Escape)
         {
@@ -328,6 +337,22 @@ public partial class MainWindow : Window
         // Undo
         _vim.Register("u",   ctx => ctx.ViewModel.Undo());
 
+        // Visual mode
+        _vim.Register("v",   ctx => {
+            _currentVimMode               = VimMode.Visual;
+            ctx.ViewModel.IsVisualMode    = true;
+            ctx.ViewModel.IsVisualLineMode = false;
+            ctx.ViewModel.VisualModeLabel  = "-- VISUAL --";
+            ctx.SyncSelection();
+        });
+        _vim.Register("V",   ctx => {
+            _currentVimMode                = VimMode.VisualLine;
+            ctx.ViewModel.IsVisualMode     = true;
+            ctx.ViewModel.IsVisualLineMode = true;
+            ctx.ViewModel.VisualAnchorLane = ctx.ViewModel.CursorLaneIndex;
+            ctx.ViewModel.VisualModeLabel  = "-- VISUAL LINE --";
+        });
+
         // Delete / yank / paste
         _vim.Register("x",   VimCommands.DeleteTask);
         _vim.Register("diw", VimCommands.DeleteTask);
@@ -352,8 +377,95 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_vim.HandleKey(key, shift, new VimContext(vm, GanttView, _vimClipboard)))
+        var ctx = new VimContext(vm, GanttView, _vimClipboard);
+
+        if (_currentVimMode == VimMode.Visual)
+        {
+            if (HandleVisualModeKey(key, shift, ctx, vm))
+                e.Handled = true;
+            return;
+        }
+
+        if (_vim.HandleKey(key, shift, ctx))
             e.Handled = true;
+    }
+
+    private bool HandleVisualModeKey(Key key, bool shift, VimContext ctx, MainViewModel vm)
+    {
+        switch (key)
+        {
+            case Key.D:
+                if (_currentVimMode == VimMode.VisualLine)
+                    DeleteLaneRange(ctx, vm);
+                else
+                    VimCommands.DeleteTask(ctx);
+                ExitVisualMode(vm);
+                return true;
+            case Key.Y:
+                if (_currentVimMode == VimMode.VisualLine)
+                    VimCommands.YankLane(ctx);
+                else
+                    VimCommands.YankTask(ctx);
+                ExitVisualMode(vm);
+                return true;
+            // V mode: j/k extend lane selection range
+            case Key.K when _currentVimMode == VimMode.VisualLine:
+                if (vm.CursorLaneIndex > 0) { vm.CursorLaneIndex--; ctx.GanttView.ScrollCursorIntoView(); }
+                return true;
+            case Key.J when _currentVimMode == VimMode.VisualLine:
+                if (vm.CursorLaneIndex < ctx.LaneCount - 1) { vm.CursorLaneIndex++; ctx.GanttView.ScrollCursorIntoView(); }
+                return true;
+            // V mode: h/l are no-ops (lane selection doesn't change horizontally)
+            case Key.H when _currentVimMode == VimMode.VisualLine:
+            case Key.L when _currentVimMode == VimMode.VisualLine:
+                return true;
+            default:
+                return _vim.HandleKey(key, shift, ctx);
+        }
+    }
+
+
+    private void ExitVisualMode(MainViewModel vm)
+    {
+        _currentVimMode        = VimMode.Normal;
+        vm.IsVisualMode        = false;
+        vm.IsVisualLineMode    = false;
+        vm.VisualAnchorLane    = -1;
+        vm.VisualModeLabel     = "";
+    }
+
+    private static void DeleteLaneRange(VimContext ctx, MainViewModel vm)
+    {
+        int anchor   = Math.Clamp(vm.VisualAnchorLane, 0, vm.Lanes.Count - 1);
+        int cursor   = Math.Clamp(vm.CursorLaneIndex,  0, vm.Lanes.Count - 1);
+        int selStart = Math.Min(anchor, cursor);
+        int selEnd   = Math.Max(anchor, cursor);
+
+        var lanesToDelete = Enumerable.Range(selStart, selEnd - selStart + 1)
+            .Select(i => vm.Lanes.ElementAtOrDefault(i))
+            .Where(l => l != null)
+            .ToList();
+
+        var cmds = new List<IUndoableCommand>();
+        foreach (var lane in lanesToDelete)
+        {
+            foreach (var item in vm.Items.Where(i => i.LaneId == lane!.Id).ToList())
+            {
+                if (vm.SelectedItem?.Id == item.Id) vm.SelectedItem = null;
+                vm.Items.Remove(item);
+                cmds.Add(new RemoveItemCommand(vm.Items, item));
+            }
+        }
+        foreach (var lane in lanesToDelete)
+        {
+            if (vm.Lanes.Count <= 1) break;
+            int idx = vm.Lanes.IndexOf(lane!);
+            vm.Lanes.Remove(lane!);
+            cmds.Add(new RemoveLaneCommand(vm.Lanes, lane!, idx));
+        }
+        vm.Analyze();
+        vm.UndoRedo.Push(new CompositeCommand(cmds));
+        vm.CursorLaneIndex = Math.Min(selStart, vm.Lanes.Count - 1);
     }
 
     protected override void OnPreviewTextInput(TextCompositionEventArgs e)
@@ -365,6 +477,8 @@ public partial class MainWindow : Window
     }
 
     private enum VimAddMode { After, Start, LaneBelow, LaneAbove }
+    private enum VimMode    { Normal, Visual, VisualLine }
+    private VimMode _currentVimMode = VimMode.Normal;
 
     private void VimAddTask(VimContext ctx, VimAddMode mode)
     {

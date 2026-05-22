@@ -49,6 +49,10 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty] private int    _cursorLaneIndex = 0;
     [ObservableProperty] private double _cursorTime      = 0.0;
+    [ObservableProperty] private bool   _isVisualMode      = false;
+    [ObservableProperty] private bool   _isVisualLineMode  = false;
+    [ObservableProperty] private int    _visualAnchorLane  = -1;
+    [ObservableProperty] private string _visualModeLabel   = "";
 
     [ObservableProperty] private string         _projectName = "新しいプロジェクト";
     [ObservableProperty] private string?        _currentFilePath;

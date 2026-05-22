@@ -60,6 +60,15 @@ public partial class GanttCanvas : UserControl
             typeof(GanttCanvas), new FrameworkPropertyMetadata(0.0,
                 FrameworkPropertyMetadataOptions.BindsTwoWayByDefault,
                 (d, _) => ((GanttCanvas)d).Render()));
+    public static readonly DependencyProperty IsVisualModeProperty =
+        DependencyProperty.Register(nameof(IsVisualMode), typeof(bool),
+            typeof(GanttCanvas), new PropertyMetadata(false, (d, _) => ((GanttCanvas)d).Render()));
+    public static readonly DependencyProperty IsVisualLineModeProperty =
+        DependencyProperty.Register(nameof(IsVisualLineMode), typeof(bool),
+            typeof(GanttCanvas), new PropertyMetadata(false, (d, _) => ((GanttCanvas)d).Render()));
+    public static readonly DependencyProperty VisualAnchorLaneProperty =
+        DependencyProperty.Register(nameof(VisualAnchorLane), typeof(int),
+            typeof(GanttCanvas), new PropertyMetadata(-1, (d, _) => ((GanttCanvas)d).Render()));
 
     public IEnumerable<ItemViewModel>? ItemsSource
     { get => (IEnumerable<ItemViewModel>?)GetValue(ItemsSourceProperty); set => SetValue(ItemsSourceProperty, value); }
@@ -83,6 +92,12 @@ public partial class GanttCanvas : UserControl
     { get => (int)GetValue(CursorLaneIndexProperty);    set => SetValue(CursorLaneIndexProperty, value); }
     public double CursorTime
     { get => (double)GetValue(CursorTimeProperty);      set => SetValue(CursorTimeProperty, value); }
+    public bool   IsVisualMode
+    { get => (bool)GetValue(IsVisualModeProperty);      set => SetValue(IsVisualModeProperty, value); }
+    public bool   IsVisualLineMode
+    { get => (bool)GetValue(IsVisualLineModeProperty);  set => SetValue(IsVisualLineModeProperty, value); }
+    public int    VisualAnchorLane
+    { get => (int)GetValue(VisualAnchorLaneProperty);   set => SetValue(VisualAnchorLaneProperty, value); }
 
     // ── Layout constants ──────────────────────────────────────────────────
     private double _laneHeaderW  = 150;
@@ -417,19 +432,41 @@ public partial class GanttCanvas : UserControl
                 }, 0, rowY);
         }
 
-        // 2.5. Cursor cell
+        // 2.5. Cursor cell (+ visual mode highlights)
         if (_drag == DragMode.None && nLanes > 0)
         {
-            int    cl    = Math.Clamp(CursorLaneIndex, 0, nLanes - 1);
-            double cellW = Math.Max(GetGridStepInSeconds() * pps, 2);
-            var accentColor = ((SolidColorBrush)palette.Accent).Color;
+            int    cl         = Math.Clamp(CursorLaneIndex, 0, nLanes - 1);
+            double cellW      = Math.Max(GetGridStepInSeconds() * pps, 2);
+            var    accentColor = ((SolidColorBrush)palette.Accent).Color;
+
+            // V mode: highlight selected lane range (anchor to cursor)
+            if (IsVisualLineMode && VisualAnchorLane >= 0)
+            {
+                int selStart = Math.Min(cl, Math.Clamp(VisualAnchorLane, 0, nLanes - 1));
+                int selEnd   = Math.Max(cl, Math.Clamp(VisualAnchorLane, 0, nLanes - 1));
+                for (int si = selStart; si <= selEnd; si++)
+                {
+                    Add(new Border
+                    {
+                        Width           = totalW,
+                        Height          = LaneH,
+                        Background      = new SolidColorBrush(Color.FromArgb(40,  accentColor.R, accentColor.G, accentColor.B)),
+                        BorderBrush     = new SolidColorBrush(Color.FromArgb(180, accentColor.R, accentColor.G, accentColor.B)),
+                        BorderThickness = new Thickness(0, si == selStart ? 2 : 0, 0, si == selEnd ? 2 : 0),
+                    }, 0, si * LaneH);
+                }
+            }
+
+            // cursor cell: more prominent in visual mode
+            byte bgA     = IsVisualMode ? (byte)55  : (byte)18;
+            byte borderA = IsVisualMode ? (byte)220 : (byte)120;
             Add(new Border
             {
                 Width           = cellW,
                 Height          = LaneH,
-                Background      = new SolidColorBrush(Color.FromArgb(18, accentColor.R, accentColor.G, accentColor.B)),
-                BorderBrush     = new SolidColorBrush(Color.FromArgb(120, accentColor.R, accentColor.G, accentColor.B)),
-                BorderThickness = new Thickness(1),
+                Background      = new SolidColorBrush(Color.FromArgb(bgA,     accentColor.R, accentColor.G, accentColor.B)),
+                BorderBrush     = new SolidColorBrush(Color.FromArgb(borderA, accentColor.R, accentColor.G, accentColor.B)),
+                BorderThickness = new Thickness(IsVisualMode ? 2 : 1),
             }, CursorTime * pps, cl * LaneH);
         }
 
