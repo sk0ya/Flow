@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -296,218 +295,47 @@ public partial class MainWindow : Window
     {
         _vim.Init();
 
-        // ── Cell navigation (cursor) ──────────────────────────────────────
-        _vim.Register("h", ctx => {
-            ctx.ViewModel.CursorTime = Math.Max(0, ctx.ViewModel.CursorTime - ctx.GridStep);
-            ctx.SyncSelection();
-        });
-        _vim.Register("l", ctx => {
-            ctx.ViewModel.CursorTime += ctx.GridStep;
-            ctx.SyncSelection();
-        });
-        _vim.Register("k", ctx => {
-            if (ctx.ViewModel.CursorLaneIndex > 0) { ctx.ViewModel.CursorLaneIndex--; ctx.SyncSelection(); }
-        });
-        _vim.Register("j", ctx => {
-            if (ctx.ViewModel.CursorLaneIndex < ctx.LaneCount - 1) { ctx.ViewModel.CursorLaneIndex++; ctx.SyncSelection(); }
-        });
+        // Navigation
+        _vim.Register("h",   VimCommands.Left);
+        _vim.Register("l",   VimCommands.Right);
+        _vim.Register("k",   VimCommands.Up);
+        _vim.Register("j",   VimCommands.Down);
+        _vim.Register("gg",  VimCommands.GoFirst);
+        _vim.Register("G",   VimCommands.GoLast);
+        _vim.Register("^",   VimCommands.GoFirstTask);
+        _vim.Register("w",   VimCommands.WordForward);
+        _vim.Register("b",   VimCommands.WordBackward);
+        _vim.Register("e",   VimCommands.WordEnd);
+        _vim.Register("0",   VimCommands.GoLineStart);
+        _vim.Register("$",   VimCommands.GoLineEnd);
 
-        // ── Lane jump ────────────────────────────────────────────────────
-        _vim.Register("gg", ctx => { ctx.ViewModel.CursorLaneIndex = 0;                    ctx.SyncSelection(); });
-        _vim.Register("G",  ctx => { ctx.ViewModel.CursorLaneIndex = ctx.LaneCount - 1;    ctx.SyncSelection(); });
-        _vim.Register("^",  ctx => {   // first task in current lane
-            var first = ctx.ViewModel.Items
-                .Where(i => i.LaneId == ctx.CursorLaneId())
-                .OrderBy(i => i.StartTime).FirstOrDefault();
-            if (first != null) { ctx.ViewModel.CursorTime = first.StartTime; ctx.ViewModel.SetSelectionFromVim(first); }
-        });
+        // Duration / move
+        _vim.Register("+",   VimCommands.DurationGrow);
+        _vim.Register("-",   VimCommands.DurationShrink);
+        _vim.Register(">",   VimCommands.MoveTaskRight);
+        _vim.Register("<",   VimCommands.MoveTaskLeft);
 
-        // ── Task-jump navigation ──────────────────────────────────────────
-        _vim.Register("w", ctx => {   // next task start (crosses lanes)
-            var vm    = ctx.ViewModel;
-            var lanes = vm.Lanes;
-            for (int li = vm.CursorLaneIndex; li < lanes.Count; li++)
-            {
-                double minStart = li == vm.CursorLaneIndex ? vm.CursorTime + 1e-9 : -1e-9;
-                var next = vm.Items
-                    .Where(i => i.LaneId == lanes[li].Id && i.StartTime > minStart)
-                    .OrderBy(i => i.StartTime).FirstOrDefault();
-                if (next != null)
-                {
-                    vm.CursorLaneIndex = li;
-                    vm.CursorTime = next.StartTime;
-                    vm.SetSelectionFromVim(next);
-                    return;
-                }
-            }
-        });
-        _vim.Register("b", ctx => {   // previous task start (crosses lanes)
-            var vm  = ctx.ViewModel;
-            var lanes = vm.Lanes;
-            var cur = ctx.TaskAtCursor();
-            if (cur != null && vm.CursorTime > cur.StartTime + 1e-9)
-            {
-                vm.CursorTime = cur.StartTime;
-                vm.SetSelectionFromVim(cur);
-                return;
-            }
-            for (int li = vm.CursorLaneIndex; li >= 0; li--)
-            {
-                double maxStart = li == vm.CursorLaneIndex ? vm.CursorTime - 1e-9 : double.MaxValue;
-                var prev = vm.Items
-                    .Where(i => i.LaneId == lanes[li].Id && i.StartTime < maxStart)
-                    .OrderByDescending(i => i.StartTime).FirstOrDefault();
-                if (prev != null)
-                {
-                    vm.CursorLaneIndex = li;
-                    vm.CursorTime = prev.StartTime;
-                    vm.SetSelectionFromVim(prev);
-                    return;
-                }
-            }
-        });
-        _vim.Register("e", ctx => {   // end of current/next task
-            var vm     = ctx.ViewModel;
-            var laneId = ctx.CursorLaneId();
-            var task   = ctx.TaskAtCursor() ??
-                         vm.Items.Where(i => i.LaneId == laneId && i.StartTime >= vm.CursorTime - 1e-9)
-                                 .OrderBy(i => i.StartTime).FirstOrDefault();
-            if (task != null)
-            {
-                double last = Math.Max(task.StartTime, task.StartTime + task.Duration - ctx.GridStep);
-                vm.CursorTime = last;
-                vm.SetSelectionFromVim(task);
-            }
-        });
-        _vim.Register("0", ctx => {   // start of lane
-            ctx.ViewModel.CursorTime = 0;
-            ctx.SyncSelection();
-        });
-        _vim.Register("$", ctx => {   // end of last task in lane
-            var vm     = ctx.ViewModel;
-            var laneId = ctx.CursorLaneId();
-            var last   = vm.Items.Where(i => i.LaneId == laneId)
-                                 .OrderByDescending(i => i.StartTime + i.Duration).FirstOrDefault();
-            if (last != null)
-            {
-                double pos = Math.Max(last.StartTime, last.StartTime + last.Duration - ctx.GridStep);
-                vm.CursorTime = pos;
-                vm.SetSelectionFromVim(last);
-            }
-        });
+        // View
+        _vim.Register("zz",  ctx => ctx.GanttView.ScrollCursorIntoCenter());
 
-        // ── Duration / Move task ─────────────────────────────────────────
-        _vim.Register("+", ctx => {   // duration +1 step
-            var task = ctx.TaskAtCursor();
-            if (task == null) return;
-            double old = task.Duration, neu = old + ctx.GridStep;
-            task.Duration = neu;
-            ctx.ViewModel.UndoRedo.Push(new PropertyChangeCommand<double>(v => task.Duration = v, old, neu));
-        });
-        _vim.Register("-", ctx => {   // duration -1 step
-            var task = ctx.TaskAtCursor();
-            if (task == null) return;
-            double old = task.Duration, neu = Math.Max(ctx.GridStep, old - ctx.GridStep);
-            task.Duration = neu;
-            ctx.ViewModel.UndoRedo.Push(new PropertyChangeCommand<double>(v => task.Duration = v, old, neu));
-        });
-        _vim.Register(">", ctx => {   // move task right
-            var task = ctx.TaskAtCursor();
-            if (task == null) return;
-            double old = task.StartTime, neu = old + ctx.GridStep;
-            task.StartTime = neu;
-            ctx.ViewModel.CursorTime = neu;
-            ctx.ViewModel.SetSelectionFromVim(task);
-            ctx.ViewModel.UndoRedo.Push(new PropertyChangeCommand<double>(v => task.StartTime = v, old, neu));
-        });
-        _vim.Register("<", ctx => {   // move task left
-            var task = ctx.TaskAtCursor();
-            if (task == null) return;
-            double old = task.StartTime, neu = Math.Max(0, old - ctx.GridStep);
-            task.StartTime = neu;
-            ctx.ViewModel.CursorTime = neu;
-            ctx.ViewModel.SetSelectionFromVim(task);
-            ctx.ViewModel.UndoRedo.Push(new PropertyChangeCommand<double>(v => task.StartTime = v, old, neu));
-        });
+        // Edit
+        _vim.Register("i",   VimCommands.Rename);
+        _vim.Register("a",   ctx => VimAddTask(ctx, VimAddMode.After));
+        _vim.Register("I",   ctx => VimAddTask(ctx, VimAddMode.Start));
+        _vim.Register("o",   ctx => VimAddTask(ctx, VimAddMode.LaneBelow));
+        _vim.Register("O",   ctx => VimAddTask(ctx, VimAddMode.LaneAbove));
 
-        // ── View ──────────────────────────────────────────────────────────
-        _vim.Register("zz", ctx => ctx.GanttView.ScrollCursorIntoCenter());
+        // Undo
+        _vim.Register("u",   ctx => ctx.ViewModel.Undo());
 
-        // ── Editing ───────────────────────────────────────────────────────
-        _vim.Register("i", ctx => {   // rename at cursor / create+rename on empty cell
-            var task = ctx.TaskAtCursor();
-            if (task != null)
-                ctx.GanttView.StartRenameSelectedItem();   // commit fires ItemRenamedFunc
-            else
-            {
-                var laneId = ctx.CursorLaneId();
-                if (laneId == Guid.Empty) return;
-                var newItem = ctx.ViewModel.AddNewItemAt(laneId, ctx.ViewModel.CursorTime);
-                if (newItem != null) ctx.GanttView.StartRenameSelectedItem(discardOnCancel: true);
-                // commit fires ItemCreatedCommittedFunc; cancel fires DiscardItemFunc
-            }
-        });
-        _vim.Register("x", ctx => {   // delete task at cursor
-            var task = ctx.TaskAtCursor();
-            if (task == null) return;
-            var vm = ctx.ViewModel;
-            var cmd = new RemoveItemCommand(vm.Items, task);
-            if (vm.SelectedItem?.Id == task.Id) vm.SelectedItem = null;
-            vm.Items.Remove(task);
-            vm.UndoRedo.Push(cmd);
-        });
-        _vim.Register("a", ctx => VimAddTask(ctx, VimAddMode.After));
-        _vim.Register("I", ctx => VimAddTask(ctx, VimAddMode.Start));
-        _vim.Register("o", ctx => VimAddTask(ctx, VimAddMode.LaneBelow));
-        _vim.Register("O", ctx => VimAddTask(ctx, VimAddMode.LaneAbove));
-
-        // ── Undo / Redo ───────────────────────────────────────────────────
-        _vim.Register("u", ctx => ctx.ViewModel.Undo());
-
-        // ── Yank / Delete / Paste ─────────────────────────────────────────
-        _vim.Register("yiw", ctx => {
-            var task = ctx.TaskAtCursor();
-            if (task != null) ctx.Clipboard.YankTask(task.ToModel());
-        });
-        _vim.Register("yy", ctx => {
-            var lane = ctx.ViewModel.Lanes.ElementAtOrDefault(ctx.ViewModel.CursorLaneIndex);
-            if (lane == null) return;
-            ctx.Clipboard.YankLane(
-                lane.ToModel(),
-                ctx.ViewModel.Items.Where(i => i.LaneId == lane.Id).Select(i => i.ToModel()).ToList());
-        });
-        _vim.Register("diw", ctx => {
-            var task = ctx.TaskAtCursor();
-            if (task == null) return;
-            var vm = ctx.ViewModel;
-            var cmd = new RemoveItemCommand(vm.Items, task);
-            if (vm.SelectedItem?.Id == task.Id) vm.SelectedItem = null;
-            vm.Items.Remove(task);
-            vm.UndoRedo.Push(cmd);
-        });
-        _vim.Register("dd", ctx => {
-            var vm   = ctx.ViewModel;
-            var lane = vm.Lanes.ElementAtOrDefault(vm.CursorLaneIndex);
-            if (lane == null) return;
-            var cmds = new List<IUndoableCommand>();
-            foreach (var item in vm.Items.Where(i => i.LaneId == lane.Id).ToList())
-            {
-                var removeCmd = new RemoveItemCommand(vm.Items, item);
-                if (vm.SelectedItem?.Id == item.Id) vm.SelectedItem = null;
-                vm.Items.Remove(item);
-                cmds.Add(removeCmd);
-            }
-            if (vm.Lanes.Count > 1)
-            {
-                int laneIdx = vm.Lanes.IndexOf(lane);
-                vm.Lanes.Remove(lane);
-                cmds.Add(new RemoveLaneCommand(vm.Lanes, lane, laneIdx));
-            }
-            vm.Analyze();
-            vm.UndoRedo.Push(new CompositeCommand(cmds));
-        });
-        _vim.Register("p", ctx => VimPaste(ctx, before: false));
-        _vim.Register("P", ctx => VimPaste(ctx, before: true));
+        // Delete / yank / paste
+        _vim.Register("x",   VimCommands.DeleteTask);
+        _vim.Register("diw", VimCommands.DeleteTask);
+        _vim.Register("yiw", VimCommands.YankTask);
+        _vim.Register("yy",  VimCommands.YankLane);
+        _vim.Register("dd",  VimCommands.DeleteLane);
+        _vim.Register("p",   VimCommands.PasteAfter);
+        _vim.Register("P",   VimCommands.PasteBefore);
     }
 
     private void HandleVimKey(KeyEventArgs e)
@@ -540,18 +368,19 @@ public partial class MainWindow : Window
 
     private void VimAddTask(VimContext ctx, VimAddMode mode)
     {
-        var vm    = ctx.ViewModel;
-        var lanes = vm.Lanes;
+        var vm = ctx.ViewModel;
         Guid   laneId;
         double startTime;
 
         switch (mode)
         {
             case VimAddMode.After:
+            {
                 laneId    = ctx.CursorLaneId();
                 var cur   = ctx.TaskAtCursor();
                 startTime = cur != null ? cur.StartTime + cur.Duration : vm.CursorTime + ctx.GridStep;
                 break;
+            }
             case VimAddMode.Start:
                 laneId    = ctx.CursorLaneId();
                 startTime = 0;
@@ -559,59 +388,31 @@ public partial class MainWindow : Window
             case VimAddMode.LaneBelow:
             {
                 int idx = vm.CursorLaneIndex;
-                if (idx + 1 < lanes.Count)
+                if (idx + 1 < vm.Lanes.Count)
                 {
-                    laneId = lanes[idx + 1].Id;
+                    laneId = vm.Lanes[idx + 1].Id;
                 }
                 else
                 {
                     var newLane = vm.InsertLaneAfter(idx);
-                    laneId = newLane.Id;
-                    _pendingNewLane = newLane;   // composite command pushed by ItemCreatedCommittedFunc
+                    laneId          = newLane.Id;
+                    _pendingNewLane = newLane;
                 }
                 startTime = vm.CursorTime;
                 break;
             }
             case VimAddMode.LaneAbove:
-            {
-                int idx = vm.CursorLaneIndex;
-                if (idx <= 0) return;
-                laneId    = lanes[idx - 1].Id;
+                if (vm.CursorLaneIndex <= 0) return;
+                laneId    = vm.Lanes[vm.CursorLaneIndex - 1].Id;
                 startTime = vm.CursorTime;
                 break;
-            }
-            default: return;
+            default:
+                return;
         }
 
         if (laneId == Guid.Empty) return;
         var newItem = vm.AddNewItemAt(laneId, startTime);
         if (newItem != null) ctx.GanttView.StartRenameSelectedItem(discardOnCancel: true);
-    }
-
-    private static void VimPaste(VimContext ctx, bool before)
-    {
-        var vm = ctx.ViewModel;
-        var cb = ctx.Clipboard;
-
-        if (cb.Kind == VimClipboard.ClipKind.Task && cb.Task != null)
-        {
-            var laneId = ctx.CursorLaneId();
-            if (laneId == Guid.Empty) return;
-            double start = before
-                ? Math.Max(0, vm.CursorTime - cb.Task.Duration)
-                : vm.CursorTime;
-            var item = vm.PasteItem(cb.Task, laneId, start);
-            vm.UndoRedo.Push(new AddItemCommand(vm.Items, item));
-        }
-        else if (cb.Kind == VimClipboard.ClipKind.Lane && cb.Lane.HasValue)
-        {
-            int afterIndex = before ? vm.CursorLaneIndex - 1 : vm.CursorLaneIndex;
-            var (lane, items) = vm.PasteLane(cb.Lane.Value.lane, cb.Lane.Value.items, afterIndex);
-            int laneIdx = vm.Lanes.IndexOf(lane);
-            var cmds = new List<IUndoableCommand> { new AddLaneCommand(vm.Lanes, lane, laneIdx) };
-            cmds.AddRange(items.Select(i => (IUndoableCommand)new AddItemCommand(vm.Items, i)));
-            vm.UndoRedo.Push(new CompositeCommand(cmds));
-        }
     }
 
     // ── SelectItemCommand relay (click in list = select) ─────────────────
