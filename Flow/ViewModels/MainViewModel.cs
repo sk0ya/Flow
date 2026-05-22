@@ -17,19 +17,22 @@ namespace Flow.ViewModels;
 
 public record SuggestionItem(string Value, string Source);
 
-public enum SidebarPanel { ProjectList, ProjectSettings, TaskEditor, AppSettings }
+public enum SidebarPanel { ProjectList, ProjectSettings, CanvasTools, TaskEditor, AppSettings }
 
 public partial class MainViewModel : ObservableObject
 {
-    private readonly DependencyService _dep             = new();
-    private readonly StorageService    _stor            = new();
-    private readonly AppStateService   _appStateService = new();
+    private readonly DependencyService _dep;
+    private readonly StorageService    _stor;
+    private readonly AppStateService   _appStateService;
+    private readonly ProjectDraftService _draftService;
+    private readonly ProjectExportService _exportService;
     private readonly AppState          _appState;
     private readonly DispatcherTimer   _autoSaveTimer;
     private readonly DispatcherTimer   _cellDurationTimer;
     private string _cellDurationText = "";
     private bool _suspendAutoSave;
     private bool _initializingAppearance;
+    private bool _isLoadingProject;
 
     private static readonly ThemeOption[] AvailableThemeOptions =
     {
@@ -66,6 +69,14 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool           _hasErrors;
     [ObservableProperty] private ThemeOption?   _selectedThemeOption;
     [ObservableProperty] private AccentColorOption? _selectedAccentColorOption;
+    [ObservableProperty] private bool           _isDirty;
+    [ObservableProperty] private string         _searchText = "";
+    [ObservableProperty] private CategoryViewModel? _selectedFilterCategory = CategoryViewModel.None;
+    [ObservableProperty] private bool           _showErrorsOnly;
+    [ObservableProperty] private double         _zoomPercent = 100;
+    [ObservableProperty] private string         _statusMessage = "";
+    [ObservableProperty] private double         _criticalPathDuration;
+    [ObservableProperty] private bool           _hasDraftRecovery;
 
     [ObservableProperty] private string _newCategoryName = "";
 
@@ -84,16 +95,36 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<ItemViewModel>      Items           { get; } = new();
     public ObservableCollection<ValidationError>    Errors          { get; } = new();
     public ObservableCollection<DependencyEdge>     DependencyEdges { get; } = new();
+    public ObservableCollection<ItemViewModel>      FilteredItems   { get; } = new();
+    public ObservableCollection<DependencyEdge>     FilteredDependencyEdges { get; } = new();
+    public ObservableCollection<Guid>               CriticalPathItemIds { get; } = new();
     public ObservableCollection<RecentProjectEntry> RecentProjects  { get; } = new();
     public ObservableCollection<ThemeOption> ThemeOptions { get; } = new();
     public ObservableCollection<AccentColorOption> AccentColorOptions { get; } = new();
 
     public IEnumerable<CategoryViewModel> CategoriesForPicker =>
         Enumerable.Repeat(CategoryViewModel.None, 1).Concat(Categories);
+    public IEnumerable<CategoryViewModel> CategoriesForFilter =>
+        Enumerable.Repeat(CategoryViewModel.None, 1).Concat(Categories);
 
     public static readonly string[] TimeUnitOptions = { "秒", "分", "時間", "日", "週", "スプリント" };
 
     public bool HasRecentProjects => RecentProjects.Count > 0;
+    public bool HasActiveFilters => !string.IsNullOrWhiteSpace(SearchText)
+                                 || ShowErrorsOnly
+                                 || SelectedFilterCategory is { IsNone: false };
+    public double ZoomScale => Math.Clamp(ZoomPercent / 100.0, 0.3, 4.0);
+    public double PixelsPerUnit => 80 * ZoomScale;
+    public bool CanZoomIn => ZoomPercent < 300;
+    public bool CanZoomOut => ZoomPercent > 40;
+    public bool HasStatusMessage => !string.IsNullOrWhiteSpace(StatusMessage);
+    public string SaveStateLabel => CurrentFilePath == null
+        ? (IsDirty ? "未保存のドラフトあり" : "未保存")
+        : (IsDirty ? "変更あり" : "保存済み");
+    public string FilterSummary =>
+        FilteredItems.Count == Items.Count
+            ? $"表示 {FilteredItems.Count} / {Items.Count}"
+            : $"絞り込み {FilteredItems.Count} / {Items.Count}";
 
     public double CellDurationValue
     {
@@ -134,6 +165,7 @@ public partial class MainViewModel : ObservableObject
 
     public bool IsProjectListActive    => _activeSidebarPanel == SidebarPanel.ProjectList;
     public bool IsProjectSettingsActive => _activeSidebarPanel == SidebarPanel.ProjectSettings;
+    public bool IsCanvasToolsActive    => _activeSidebarPanel == SidebarPanel.CanvasTools;
     public bool IsTaskEditorActive     => _activeSidebarPanel == SidebarPanel.TaskEditor;
     public bool IsAppSettingsActive    => _activeSidebarPanel == SidebarPanel.AppSettings;
 
@@ -165,12 +197,24 @@ public partial class MainViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsProjectListActive));
         OnPropertyChanged(nameof(IsProjectSettingsActive));
+        OnPropertyChanged(nameof(IsCanvasToolsActive));
         OnPropertyChanged(nameof(IsTaskEditorActive));
         OnPropertyChanged(nameof(IsAppSettingsActive));
     }
 
-    public MainViewModel(string? startupProjectPath = null)
+    public MainViewModel(
+        string? startupProjectPath = null,
+        DependencyService? dependencyService = null,
+        StorageService? storageService = null,
+        AppStateService? appStateService = null,
+        ProjectDraftService? draftService = null,
+        ProjectExportService? exportService = null)
     {
+        _dep = dependencyService ?? new DependencyService();
+        _stor = storageService ?? new StorageService();
+        _appStateService = appStateService ?? new AppStateService();
+        _draftService = draftService ?? new ProjectDraftService();
+        _exportService = exportService ?? new ProjectExportService();
         _appState = _appStateService.Load();
         _autoSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
         _autoSaveTimer.Tick += (_, _) => FlushAutoSave();
@@ -190,6 +234,8 @@ public partial class MainViewModel : ObservableObject
 
         RefreshRecentProjects();
         TryRestoreStartupProject(startupProjectPath);
+        RefreshFilteredView();
+        UpdateStatusMessage();
     }
 
     private void InitializeAppearance()
@@ -475,11 +521,103 @@ public partial class MainViewModel : ObservableObject
     public void Undo() => UndoRedo.Undo();
     public void Redo() => UndoRedo.Redo();
 
+    [RelayCommand]
+    private void UndoLastAction() => Undo();
+
+    [RelayCommand]
+    private void RedoLastAction() => Redo();
+
+    [RelayCommand]
+    private void ZoomIn()
+    {
+        if (!CanZoomIn) return;
+        ZoomPercent = Math.Min(300, ZoomPercent + 25);
+    }
+
+    [RelayCommand]
+    private void ZoomOut()
+    {
+        if (!CanZoomOut) return;
+        ZoomPercent = Math.Max(40, ZoomPercent - 25);
+    }
+
+    [RelayCommand]
+    private void ResetZoom() => ZoomPercent = 100;
+
+    [RelayCommand]
+    private void ClearFilters()
+    {
+        SearchText = "";
+        SelectedFilterCategory = CategoryViewModel.None;
+        ShowErrorsOnly = false;
+    }
+
+    [RelayCommand]
+    private void SelectNextMatch() => SelectSearchMatch(forward: true);
+
+    [RelayCommand]
+    private void SelectPreviousMatch() => SelectSearchMatch(forward: false);
+
+    [RelayCommand]
+    private void RestoreDraft()
+    {
+        var draft = _draftService.LoadDraft();
+        if (draft == null)
+            return;
+
+        _draftService.DeleteDraft();
+        ApplyProject(draft.Project, draft.SourceProjectPath, isDraftRestore: true);
+        StatusMessage = $"ドラフトを復元しました（{draft.SavedAtUtc.ToLocalTime():yyyy/MM/dd HH:mm} 保存）";
+    }
+
+    [RelayCommand]
+    private void AutoArrangeByDependencies()
+    {
+        var orderedItems = TopologicallyOrderItems();
+        if (orderedItems == null)
+        {
+            MessageBox.Show("循環依存があるため、自動整列を実行できません。", "Flow",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var commands = new List<IUndoableCommand>();
+        var laneSchedules = Lanes.ToDictionary(
+            lane => lane.Id,
+            _ => new List<(double Start, double End, Guid ItemId)>());
+
+        foreach (var item in orderedItems)
+        {
+            double originalStart = item.StartTime;
+            double earliest = GetRequiredStartTime(item);
+            var schedule = laneSchedules[item.LaneId];
+            double arrangedStart = FindAvailableStartInSchedule(schedule, earliest, item.Duration, item.Id);
+            schedule.Add((arrangedStart, arrangedStart + item.Duration, item.Id));
+            schedule.Sort((left, right) => left.Start.CompareTo(right.Start));
+
+            if (Math.Abs(arrangedStart - originalStart) < 1e-9)
+                continue;
+
+            item.StartTime = arrangedStart;
+            commands.Add(new PropertyChangeCommand<double>(value => item.StartTime = value, originalStart, arrangedStart));
+        }
+
+        if (commands.Count == 0)
+            return;
+
+        UndoRedo.Push(new CompositeCommand(commands));
+        Analyze();
+        StatusMessage = "依存関係に沿って自動整列しました";
+    }
+
     // ── File commands ─────────────────────────────────────────────────────
 
     [RelayCommand]
     private void NewProject()
     {
+        if (!TryConfirmProjectSwitch("新しいプロジェクトを作成"))
+            return;
+
         RunWithoutAutoSave(() =>
         {
             Items.Clear();
@@ -493,20 +631,72 @@ public partial class MainViewModel : ObservableObject
             CurrentFilePath = null;
             SelectedItem    = null;
             CanUndoDelete   = false;
+            IsDirty         = false;
             OnPropertyChanged(nameof(CategoriesForPicker));
+            _draftService.DeleteDraft();
             SetActivePanel(SidebarPanel.ProjectSettings);
+            RefreshFilteredView();
+            UpdateStatusMessage();
         });
     }
 
     [RelayCommand]
     private void SaveProject()
     {
-        if (CurrentFilePath == null) { SaveProjectAs(); return; }
-        TrySaveProject(CurrentFilePath);
+        SaveProjectInteractive();
     }
 
     [RelayCommand]
     private void SaveProjectAs()
+    {
+        SaveProjectAsInteractive();
+    }
+
+    [RelayCommand]
+    private void ExportCsv()
+    {
+        var dlg = new SaveFileDialog
+        {
+            Filter = "CSV (*.csv)|*.csv",
+            DefaultExt = "csv",
+            FileName = $"{ProjectName}.csv"
+        };
+
+        if (dlg.ShowDialog() != true) return;
+        File.WriteAllText(dlg.FileName, _exportService.ExportCsv(CaptureProject()));
+        StatusMessage = $"CSVを書き出しました: {Path.GetFileName(dlg.FileName)}";
+    }
+
+    [RelayCommand]
+    private void ExportMarkdown()
+    {
+        var dlg = new SaveFileDialog
+        {
+            Filter = "Markdown (*.md)|*.md",
+            DefaultExt = "md",
+            FileName = $"{ProjectName}.md"
+        };
+
+        if (dlg.ShowDialog() != true) return;
+        File.WriteAllText(dlg.FileName, _exportService.ExportMarkdown(CaptureProject()));
+        StatusMessage = $"Markdownを書き出しました: {Path.GetFileName(dlg.FileName)}";
+    }
+
+    [RelayCommand]
+    private void RequestExportPng()
+    {
+        ExportPngRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private bool SaveProjectInteractive()
+    {
+        if (CurrentFilePath == null)
+            return SaveProjectAsInteractive();
+
+        return TrySaveProject(CurrentFilePath);
+    }
+
+    private bool SaveProjectAsInteractive()
     {
         var dlg = new SaveFileDialog
         {
@@ -515,7 +705,7 @@ public partial class MainViewModel : ObservableObject
             FileName = ProjectName
         };
 
-        if (dlg.ShowDialog() != true) return;
+        if (dlg.ShowDialog() != true) return false;
 
         var originalProjectName = ProjectName;
         bool saved = false;
@@ -526,11 +716,16 @@ public partial class MainViewModel : ObservableObject
             if (!saved)
                 ProjectName = originalProjectName;
         });
+
+        return saved;
     }
 
     [RelayCommand]
     private void OpenProject()
     {
+        if (!TryConfirmProjectSwitch("別のプロジェクトを開く"))
+            return;
+
         var dlg = new OpenFileDialog { Filter = "Flow Project (*.flow)|*.flow" };
         if (dlg.ShowDialog() != true) return;
         TryLoadProject(dlg.FileName, showErrorMessage: true);
@@ -540,6 +735,8 @@ public partial class MainViewModel : ObservableObject
     private void OpenRecentProject(RecentProjectEntry? recentProject)
     {
         if (recentProject == null) return;
+        if (!TryConfirmProjectSwitch("最近使ったプロジェクトを開く"))
+            return;
         TryLoadProject(recentProject.FilePath, showErrorMessage: true);
     }
 
@@ -603,19 +800,13 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            _stor.Save(new SequenceProject
-            {
-                Name          = ProjectName,
-                TimeUnit      = TimeUnit,
-                CellDuration  = CellDuration,
-                TotalDuration = TotalDuration,
-                Categories    = Categories.Select(c => c.ToModel()).ToList(),
-                Lanes         = Lanes.Select(l => l.ToModel()).ToList(),
-                Items         = Items.Select(v => v.ToModel()).ToList(),
-            }, normalizedPath);
+            _stor.Save(CaptureProject(), normalizedPath);
 
             CurrentFilePath = normalizedPath;
+            _draftService.DeleteDraft();
+            IsDirty = false;
             RememberProject(normalizedPath);
+            UpdateStatusMessage();
             return true;
         }
         catch (Exception ex)
@@ -631,52 +822,66 @@ public partial class MainViewModel : ObservableObject
 
     public event EventHandler? ProjectLoaded;
     public event EventHandler? StartRenameRequested;
+    public event EventHandler? ExportPngRequested;
 
-    private void ApplyProject(SequenceProject project, string filePath)
+    private void ApplyProject(SequenceProject project, string? filePath, bool isDraftRestore = false)
     {
         RunWithoutAutoSave(() =>
         {
-            Items.Clear();
-            Lanes.Clear();
-            Categories.Clear();
-
-            ProjectName = string.IsNullOrWhiteSpace(project.Name)
-                ? Path.GetFileNameWithoutExtension(filePath)
-                : project.Name;
-            TimeUnit = project.TimeUnit;
-            CellDuration = project.CellDuration > 0
-                ? project.CellDuration
-                : project.GridDivisions is > 0 ? 1.0 / project.GridDivisions.Value : 1.0;
-            SyncCellDurationText();
-            TotalDuration = project.TotalDuration;
-            CurrentFilePath = filePath;
-
-            foreach (var cat in project.Categories)
+            _isLoadingProject = true;
+            try
             {
-                var vm = new CategoryViewModel(cat);
-                Subscribe(vm);
-                Categories.Add(vm);
+                Items.Clear();
+                Lanes.Clear();
+                Categories.Clear();
+
+                ProjectName = string.IsNullOrWhiteSpace(project.Name)
+                    ? (filePath != null ? Path.GetFileNameWithoutExtension(filePath) : "復元されたドラフト")
+                    : project.Name;
+                TimeUnit = project.TimeUnit;
+                CellDuration = project.CellDuration > 0
+                    ? project.CellDuration
+                    : project.GridDivisions is > 0 ? 1.0 / project.GridDivisions.Value : 1.0;
+                SyncCellDurationText();
+                TotalDuration = project.TotalDuration;
+                CurrentFilePath = filePath;
+
+                foreach (var cat in project.Categories)
+                {
+                    var vm = new CategoryViewModel(cat);
+                    Subscribe(vm);
+                    Categories.Add(vm);
+                }
+
+                OnPropertyChanged(nameof(CategoriesForPicker));
+                OnPropertyChanged(nameof(CategoriesForFilter));
+
+                foreach (var lane in project.Lanes)
+                    Lanes.Add(new LaneViewModel(lane));
+
+                if (Lanes.Count == 0)
+                    Lanes.Add(new LaneViewModel("レーン 1"));
+
+                foreach (var model in project.Items)
+                {
+                    var vm = new ItemViewModel(model);
+                    Subscribe(vm);
+                    Items.Add(vm);
+                }
+
+                SelectedItem  = null;
+                CanUndoDelete = false;
+                IsDirty = isDraftRestore;
+                HasDraftRecovery = _draftService.HasDraft();
+                SetActivePanel(SidebarPanel.ProjectList);
+                Analyze();
+                RefreshFilteredView();
+                UpdateStatusMessage();
             }
-
-            OnPropertyChanged(nameof(CategoriesForPicker));
-
-            foreach (var lane in project.Lanes)
-                Lanes.Add(new LaneViewModel(lane));
-
-            if (Lanes.Count == 0)
-                Lanes.Add(new LaneViewModel("レーン 1"));
-
-            foreach (var model in project.Items)
+            finally
             {
-                var vm = new ItemViewModel(model);
-                Subscribe(vm);
-                Items.Add(vm);
+                _isLoadingProject = false;
             }
-
-            SelectedItem  = null;
-            CanUndoDelete = false;
-            SetActivePanel(SidebarPanel.ProjectList);
-            Analyze();
         });
         ProjectLoaded?.Invoke(this, EventArgs.Empty);
     }
@@ -687,6 +892,29 @@ public partial class MainViewModel : ObservableObject
         {
             TryLoadProject(startupProjectPath, showErrorMessage: true);
             return;
+        }
+
+        HasDraftRecovery = _draftService.HasDraft();
+        if (HasDraftRecovery)
+        {
+            var draft = _draftService.LoadDraft();
+            string draftDetail = draft == null
+                ? ""
+                : $"\n保存日時: {draft.SavedAtUtc.ToLocalTime():yyyy/MM/dd HH:mm}";
+            var restore = MessageBox.Show(
+                $"前回の未保存ドラフトが見つかりました。復元しますか？{draftDetail}",
+                "Flow",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (restore == MessageBoxResult.Yes)
+            {
+                RestoreDraft();
+                return;
+            }
+
+            _draftService.DeleteDraft();
+            HasDraftRecovery = false;
         }
 
         if (!string.IsNullOrWhiteSpace(_appState.LastProjectPath))
@@ -818,6 +1046,7 @@ public partial class MainViewModel : ObservableObject
     private void OnCategoriesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnPropertyChanged(nameof(CategoriesForPicker));
+        OnPropertyChanged(nameof(CategoriesForFilter));
         Analyze();
         RequestAutoSave();
     }
@@ -826,6 +1055,7 @@ public partial class MainViewModel : ObservableObject
     {
         Analyze();
         RequestAutoSave();
+        RefreshFilteredView();
     }
 
     private void OnLanesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -840,6 +1070,7 @@ public partial class MainViewModel : ObservableObject
         }
 
         RequestAutoSave();
+        RefreshFilteredView();
     }
 
     private void Subscribe(CategoryViewModel vm)
@@ -848,6 +1079,7 @@ public partial class MainViewModel : ObservableObject
         {
             Analyze();
             RequestAutoSave();
+            RefreshFilteredView();
         };
     }
 
@@ -856,7 +1088,10 @@ public partial class MainViewModel : ObservableObject
         vm.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(LaneViewModel.Name))
+            {
                 RequestAutoSave();
+                RefreshFilteredView();
+            }
         };
     }
 
@@ -889,6 +1124,7 @@ public partial class MainViewModel : ObservableObject
                                or nameof(ItemViewModel.CategoryId))
             {
                 RequestAutoSave();
+                RefreshFilteredView();
             }
         };
     }
@@ -929,6 +1165,108 @@ public partial class MainViewModel : ObservableObject
         }
 
         return Math.Round(start, 10, MidpointRounding.AwayFromZero);
+    }
+
+    private double FindAvailableStartInSchedule(
+        List<(double Start, double End, Guid ItemId)> schedule,
+        double proposedStartTime,
+        double duration,
+        Guid itemId)
+    {
+        double start = Math.Max(0, proposedStartTime);
+        foreach (var slot in schedule.Where(slot => slot.ItemId != itemId).OrderBy(slot => slot.Start))
+        {
+            if (start + duration <= slot.Start + 1e-9)
+                break;
+
+            if (start < slot.End - 1e-9)
+                start = slot.End;
+        }
+
+        return NormalizeTimelineValue(start);
+    }
+
+    private List<ItemViewModel>? TopologicallyOrderItems()
+    {
+        var producers = new Dictionary<string, List<ItemViewModel>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in Items)
+        {
+            foreach (var condition in item.PostConditions)
+            {
+                var key = condition.Value.Trim();
+                if (string.IsNullOrWhiteSpace(key))
+                    continue;
+
+                if (!producers.TryGetValue(key, out var list))
+                    producers[key] = list = new List<ItemViewModel>();
+                list.Add(item);
+            }
+        }
+
+        var incoming = Items.ToDictionary(item => item.Id, _ => 0);
+        var edges = new Dictionary<Guid, List<Guid>>();
+
+        foreach (var item in Items)
+        {
+            foreach (var condition in item.PreConditions)
+            {
+                var key = condition.Value.Trim();
+                if (string.IsNullOrWhiteSpace(key) || !producers.TryGetValue(key, out var providers))
+                    continue;
+
+                foreach (var provider in providers.Where(provider => provider.Id != item.Id))
+                {
+                    if (!edges.TryGetValue(provider.Id, out var list))
+                        edges[provider.Id] = list = new List<Guid>();
+
+                    if (list.Contains(item.Id))
+                        continue;
+
+                    list.Add(item.Id);
+                    incoming[item.Id]++;
+                }
+            }
+        }
+
+        var queue = new Queue<ItemViewModel>(Items
+            .Where(item => incoming[item.Id] == 0)
+            .OrderBy(item => item.StartTime)
+            .ThenBy(item => GetLaneIndex(item.LaneId)));
+
+        var ordered = new List<ItemViewModel>();
+        while (queue.Count > 0)
+        {
+            var item = queue.Dequeue();
+            ordered.Add(item);
+
+            if (!edges.TryGetValue(item.Id, out var nextIds))
+                continue;
+
+            foreach (var nextId in nextIds)
+            {
+                incoming[nextId]--;
+                if (incoming[nextId] == 0)
+                {
+                    var next = Items.First(candidate => candidate.Id == nextId);
+                    queue.Enqueue(next);
+                }
+            }
+        }
+
+        return ordered.Count == Items.Count ? ordered : null;
+    }
+
+    private double GetRequiredStartTime(ItemViewModel item)
+    {
+        var producerEnds = Items
+            .Where(candidate => candidate.Id != item.Id)
+            .SelectMany(candidate => candidate.PostConditions
+                .Where(post => item.PreConditions.Any(pre =>
+                    string.Equals(pre.Value.Trim(), post.Value.Trim(), StringComparison.OrdinalIgnoreCase)))
+                .Select(_ => candidate.StartTime + candidate.Duration))
+            .DefaultIfEmpty(0);
+
+        return NormalizeTimelineValue(producerEnds.Max());
     }
 
     private double GetDefaultItemDuration() => NormalizeCellDuration(CellDuration) * GetSecondsPerUnit();
@@ -1018,9 +1356,17 @@ public partial class MainViewModel : ObservableObject
         foreach (var e in result.Errors) Errors.Add(e);
         HasErrors       = Errors.Count > 0;
         ProjectDuration = result.ProjectDuration;
+        CriticalPathDuration = result.CriticalPathDuration;
 
         DependencyEdges.Clear();
         foreach (var edge in result.Edges) DependencyEdges.Add(edge);
+
+        CriticalPathItemIds.Clear();
+        foreach (var itemId in result.CriticalPathItemIds)
+            CriticalPathItemIds.Add(itemId);
+
+        RefreshFilteredView();
+        UpdateStatusMessage();
     }
 
     // ── Partial property change handlers ─────────────────────────────────
@@ -1099,6 +1445,45 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnProjectNameChanged(string value) => RequestAutoSave();
 
+    partial void OnSearchTextChanged(string value)
+    {
+        RefreshFilteredView();
+        UpdateStatusMessage();
+    }
+
+    partial void OnSelectedFilterCategoryChanged(CategoryViewModel? value)
+    {
+        RefreshFilteredView();
+        UpdateStatusMessage();
+    }
+
+    partial void OnShowErrorsOnlyChanged(bool value)
+    {
+        RefreshFilteredView();
+        UpdateStatusMessage();
+    }
+
+    partial void OnZoomPercentChanged(double value)
+    {
+        double normalized = Math.Clamp(Math.Round(value / 5.0) * 5.0, 40, 300);
+        if (Math.Abs(normalized - value) > 0.0001)
+        {
+            ZoomPercent = normalized;
+            return;
+        }
+
+        OnPropertyChanged(nameof(ZoomScale));
+        OnPropertyChanged(nameof(PixelsPerUnit));
+        OnPropertyChanged(nameof(CanZoomIn));
+        OnPropertyChanged(nameof(CanZoomOut));
+    }
+
+    partial void OnIsDirtyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(SaveStateLabel));
+        UpdateStatusMessage();
+    }
+
     partial void OnSelectedThemeOptionChanged(ThemeOption? value)
     {
         if (_initializingAppearance || value == null)
@@ -1118,6 +1503,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnCurrentFilePathChanged(string? value)
     {
         SyncSelectedRecentProject();
+        OnPropertyChanged(nameof(SaveStateLabel));
     }
 
     partial void OnTotalDurationChanged(double value)
@@ -1148,9 +1534,10 @@ public partial class MainViewModel : ObservableObject
 
     private void RequestAutoSave()
     {
-        if (_suspendAutoSave || string.IsNullOrWhiteSpace(CurrentFilePath))
+        if (_suspendAutoSave || _isLoadingProject)
             return;
 
+        IsDirty = true;
         _autoSaveTimer.Stop();
         _autoSaveTimer.Start();
     }
@@ -1159,10 +1546,18 @@ public partial class MainViewModel : ObservableObject
     {
         _autoSaveTimer.Stop();
 
-        if (_suspendAutoSave || string.IsNullOrWhiteSpace(CurrentFilePath))
+        if (_suspendAutoSave || _isLoadingProject || !IsDirty)
             return;
 
-        TrySaveProject(CurrentFilePath, showErrorMessage: false);
+        if (!string.IsNullOrWhiteSpace(CurrentFilePath))
+        {
+            TrySaveProject(CurrentFilePath, showErrorMessage: false);
+            return;
+        }
+
+        _draftService.SaveDraft(CaptureProject(), CurrentFilePath);
+        HasDraftRecovery = true;
+        UpdateStatusMessage();
     }
 
     private void RunWithoutAutoSave(Action action)
@@ -1187,6 +1582,143 @@ public partial class MainViewModel : ObservableObject
             ? null
             : RecentProjects.FirstOrDefault(project =>
                 string.Equals(project.FilePath, normalizedCurrentPath, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private SequenceProject CaptureProject() => new()
+    {
+        Name = ProjectName,
+        TimeUnit = TimeUnit,
+        CellDuration = CellDuration,
+        TotalDuration = TotalDuration,
+        Categories = Categories.Select(c => c.ToModel()).ToList(),
+        Lanes = Lanes.Select(l => l.ToModel()).ToList(),
+        Items = Items.Select(v => v.ToModel()).ToList(),
+    };
+
+    private bool TryConfirmProjectSwitch(string actionLabel)
+    {
+        if (!IsDirty)
+            return true;
+
+        var result = MessageBox.Show(
+            $"{actionLabel}前に現在の変更を保存しますか？",
+            "Flow",
+            MessageBoxButton.YesNoCancel,
+            MessageBoxImage.Question);
+
+        if (result == MessageBoxResult.Cancel)
+            return false;
+
+        if (result == MessageBoxResult.Yes)
+            return SaveProjectInteractive();
+
+        _draftService.DeleteDraft();
+        HasDraftRecovery = false;
+        return true;
+    }
+
+    public bool CanCloseWindow()
+    {
+        if (!TryConfirmProjectSwitch("アプリを終了する"))
+            return false;
+
+        return true;
+    }
+
+    private void RefreshFilteredView()
+    {
+        var visibleIds = new HashSet<Guid>();
+        var filteredItems = Items.Where(MatchesFilters)
+            .OrderBy(item => GetLaneIndex(item.LaneId))
+            .ThenBy(item => item.StartTime)
+            .ThenBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+
+        FilteredItems.Clear();
+        foreach (var item in filteredItems)
+        {
+            FilteredItems.Add(item);
+            visibleIds.Add(item.Id);
+        }
+
+        FilteredDependencyEdges.Clear();
+        foreach (var edge in DependencyEdges.Where(edge =>
+                     visibleIds.Contains(edge.FromId) && visibleIds.Contains(edge.ToId)))
+        {
+            FilteredDependencyEdges.Add(edge);
+        }
+
+        OnPropertyChanged(nameof(FilterSummary));
+        UpdateStatusMessage();
+    }
+
+    private bool MatchesFilters(ItemViewModel item)
+    {
+        if (ShowErrorsOnly && !item.HasErrors)
+            return false;
+
+        if (SelectedFilterCategory is { IsNone: false } filterCategory && item.CategoryId != filterCategory.Id)
+            return false;
+
+        if (string.IsNullOrWhiteSpace(SearchText))
+            return true;
+
+        string search = SearchText.Trim();
+        var laneName = Lanes.FirstOrDefault(lane => lane.Id == item.LaneId)?.Name ?? "";
+        var categoryName = Categories.FirstOrDefault(category => category.Id == item.CategoryId)?.Name ?? "";
+
+        return item.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+            || item.Description.Contains(search, StringComparison.OrdinalIgnoreCase)
+            || laneName.Contains(search, StringComparison.OrdinalIgnoreCase)
+            || categoryName.Contains(search, StringComparison.OrdinalIgnoreCase)
+            || item.PreConditions.Any(condition => condition.Value.Contains(search, StringComparison.OrdinalIgnoreCase))
+            || item.PostConditions.Any(condition => condition.Value.Contains(search, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void SelectSearchMatch(bool forward)
+    {
+        var pool = FilteredItems
+            .Where(item => string.IsNullOrWhiteSpace(SearchText) || MatchesFilters(item))
+            .ToList();
+
+        if (pool.Count == 0)
+            return;
+
+        int currentIndex = SelectedItem == null ? -1 : pool.FindIndex(item => item.Id == SelectedItem.Id);
+        int nextIndex = forward
+            ? (currentIndex + 1 + pool.Count) % pool.Count
+            : (currentIndex - 1 + pool.Count) % pool.Count;
+
+        SelectedItem = pool[nextIndex];
+        SetActivePanel(SidebarPanel.TaskEditor);
+    }
+
+    private int GetLaneIndex(Guid laneId)
+    {
+        for (int index = 0; index < Lanes.Count; index++)
+        {
+            if (Lanes[index].Id == laneId)
+                return index;
+        }
+
+        return int.MaxValue;
+    }
+
+    private void UpdateStatusMessage()
+    {
+        if (HasDraftRecovery && !IsDirty && CurrentFilePath == null)
+        {
+            StatusMessage = "前回のドラフトを復元できます";
+            return;
+        }
+
+        if (HasActiveFilters)
+        {
+            StatusMessage = FilterSummary;
+            return;
+        }
+
+        StatusMessage = SaveStateLabel;
     }
 
     private double ConvertCellDurationToDisplay(double value) =>
@@ -1272,4 +1804,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     private static string FormatNumber(double value) => value.ToString("0.####");
+
+    private static double NormalizeTimelineValue(double value) =>
+        Math.Round(value, 10, MidpointRounding.AwayFromZero);
 }

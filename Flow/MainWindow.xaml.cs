@@ -4,7 +4,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using Microsoft.Win32;
 using Flow.ViewModels;
+using Flow.Views.Controls;
 
 namespace Flow;
 
@@ -14,6 +16,7 @@ public partial class MainWindow : Window
     private bool     _isPre;
     private bool     _suppressPopup;
     private double   _savedSidebarWidth = 270.0;
+    private (LaneViewModel lane, int index)? _pendingLaneCreatedDuringMove;
 
     // ── Vim state ─────────────────────────────────────────────────────────
     private readonly VimController _vim;
@@ -29,10 +32,31 @@ public partial class MainWindow : Window
         _vim = new VimController(vm, GanttView);
         DataContext = vm;
         GanttView.AddLaneFunc          = vm.AddNewLane;
+        GanttView.LaneCreatedFunc      = (lane, index) =>
+            vm.UndoRedo.Push(new AddLaneCommand(vm.Lanes, lane, index));
+        GanttView.LaneCreatedDuringMoveFunc = (lane, index) =>
+            _pendingLaneCreatedDuringMove = (lane, index);
         GanttView.AddItemAtFunc        = vm.AddNewItemAt;
-        GanttView.ReorderLanesCallback = vm.ReorderLane;
+        GanttView.ReorderLanesCallback = (from, to) =>
+        {
+            vm.ReorderLane(from, to);
+            vm.UndoRedo.Push(new ReorderLaneCommand(vm.Lanes, from, to));
+        };
 
         GanttView.DiscardItemFunc = _vim.HandleDiscardedNewItem;
+        GanttView.ItemTimelineChangedFunc = changes =>
+        {
+            var commands = BuildTimelineCommands(changes);
+            if (_pendingLaneCreatedDuringMove is { } pendingLane)
+            {
+                commands.Insert(0, new AddLaneCommand(vm.Lanes, pendingLane.lane, pendingLane.index));
+                _pendingLaneCreatedDuringMove = null;
+            }
+            if (commands.Count > 0)
+                vm.UndoRedo.Push(new CompositeCommand(commands));
+        };
+        GanttView.LaneRenamedFunc = (lane, oldName, newName) =>
+            vm.UndoRedo.Push(new PropertyChangeCommand<string>(value => lane.Name = value, oldName, newName));
 
         GanttView.ItemCreatedCommittedFunc = item =>
         {
@@ -48,8 +72,14 @@ public partial class MainWindow : Window
             if (e.PropertyName == nameof(MainViewModel.IsSidebarOpen))
                 UpdateSidebarColumns(vm);
         };
+        vm.ExportPngRequested += (_, _) => ExportPng();
         vm.ProjectLoaded        += (_, _) => GanttView.RequestAutoFitLaneHeader();
         vm.StartRenameRequested += (_, _) => GanttView.StartRenameSelectedItem(discardOnCancel: true);
+        Closing += (_, e) =>
+        {
+            if (!vm.CanCloseWindow())
+                e.Cancel = true;
+        };
     }
 
     private void UpdateSidebarColumns(MainViewModel vm)
@@ -95,6 +125,7 @@ public partial class MainWindow : Window
         {
             "ProjectList"     => SidebarPanel.ProjectList,
             "ProjectSettings" => SidebarPanel.ProjectSettings,
+            "CanvasTools"     => SidebarPanel.CanvasTools,
             "TaskEditor"      => SidebarPanel.TaskEditor,
             "AppSettings"     => SidebarPanel.AppSettings,
             _                 => SidebarPanel.ProjectList,
@@ -118,6 +149,54 @@ public partial class MainWindow : Window
     }
 
     private void OnCloseWindow(object sender, RoutedEventArgs e) => Close();
+
+    private List<IUndoableCommand> BuildTimelineCommands(IReadOnlyList<TimelineEditChange> changes)
+    {
+        var commands = new List<IUndoableCommand>();
+        foreach (var change in changes)
+        {
+            if (Math.Abs(change.OldStartTime - change.NewStartTime) > 1e-9)
+            {
+                commands.Add(new PropertyChangeCommand<double>(
+                    value => change.Item.StartTime = value,
+                    change.OldStartTime,
+                    change.NewStartTime));
+            }
+
+            if (Math.Abs(change.OldDuration - change.NewDuration) > 1e-9)
+            {
+                commands.Add(new PropertyChangeCommand<double>(
+                    value => change.Item.Duration = value,
+                    change.OldDuration,
+                    change.NewDuration));
+            }
+
+            if (change.OldLaneId != change.NewLaneId)
+            {
+                commands.Add(new PropertyChangeCommand<Guid>(
+                    value => change.Item.LaneId = value,
+                    change.OldLaneId,
+                    change.NewLaneId));
+            }
+        }
+
+        return commands;
+    }
+
+    private void ExportPng()
+    {
+        var dlg = new SaveFileDialog
+        {
+            Filter = "PNG Image (*.png)|*.png",
+            DefaultExt = "png",
+            FileName = $"{(DataContext as MainViewModel)?.ProjectName ?? "Flow"}.png"
+        };
+
+        if (dlg.ShowDialog() != true)
+            return;
+
+        GanttView.ExportViewportPng(dlg.FileName);
+    }
 
     // ── Autocomplete popup ────────────────────────────────────────────────
 

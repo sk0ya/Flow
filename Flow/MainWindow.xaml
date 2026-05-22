@@ -14,6 +14,8 @@
 
     <Window.InputBindings>
         <KeyBinding Key="S" Modifiers="Ctrl" Command="{Binding SaveProjectCommand}"/>
+        <KeyBinding Key="Z" Modifiers="Ctrl" Command="{Binding UndoLastActionCommand}"/>
+        <KeyBinding Key="Y" Modifiers="Ctrl" Command="{Binding RedoLastActionCommand}"/>
         <KeyBinding Key="Delete"             Command="{Binding DeleteSelectedItemCommand}"/>
         <KeyBinding Key="N" Modifiers="Ctrl" Command="{Binding AddItemCommand}"/>
     </Window.InputBindings>
@@ -590,17 +592,23 @@
                                      Tag="ProjectList"
                                      Click="OnActivityBarClick"
                                      ToolTip="プロジェクト"/>
+                         <RadioButton Style="{StaticResource ActivityBtn}"
+                                      Content="⚙"
+                                      IsChecked="{Binding IsProjectSettingsActive, Mode=OneWay}"
+                                      Tag="ProjectSettings"
+                                      Click="OnActivityBarClick"
+                                      ToolTip="プロジェクト設定"/>
                         <RadioButton Style="{StaticResource ActivityBtn}"
-                                     Content="⚙"
-                                     IsChecked="{Binding IsProjectSettingsActive, Mode=OneWay}"
-                                     Tag="ProjectSettings"
+                                     Content="◫"
+                                     IsChecked="{Binding IsCanvasToolsActive, Mode=OneWay}"
+                                     Tag="CanvasTools"
                                      Click="OnActivityBarClick"
-                                     ToolTip="プロジェクト設定"/>
-                        <RadioButton Style="{StaticResource ActivityBtn}"
-                                     Content="✏"
-                                     IsChecked="{Binding IsTaskEditorActive, Mode=OneWay}"
-                                     Tag="TaskEditor"
-                                     Click="OnActivityBarClick"
+                                     ToolTip="表示・操作"/>
+                         <RadioButton Style="{StaticResource ActivityBtn}"
+                                      Content="✏"
+                                      IsChecked="{Binding IsTaskEditorActive, Mode=OneWay}"
+                                      Tag="TaskEditor"
+                                      Click="OnActivityBarClick"
                                      ToolTip="タスク編集"/>
                     </StackPanel>
                 </DockPanel>
@@ -740,7 +748,8 @@
                     <Border Grid.Row="0" Background="{DynamicResource AppSurfaceAltBrush}" BorderBrush="{DynamicResource AppBorderSoftBrush}" BorderThickness="0,0,0,1" Padding="12,8">
                         <TextBlock Text="プロジェクト設定" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
                     </Border>
-                    <StackPanel Grid.Row="1" Margin="12,12,12,0">
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="12,12,12,16">
                         <TextBlock Text="プロジェクト名" FontSize="10" FontWeight="SemiBold"
                                    Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,0,0,4"/>
                         <TextBox Style="{StaticResource InputBox}" FontSize="12"
@@ -820,7 +829,126 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </StackPanel>
+
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- Panel: 表示・操作 -->
+                <Grid Visibility="{Binding IsCanvasToolsActive, Converter={StaticResource BoolVis}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Border Grid.Row="0" Background="{DynamicResource AppSurfaceAltBrush}" BorderBrush="{DynamicResource AppBorderSoftBrush}" BorderThickness="0,0,0,1" Padding="12,8">
+                        <TextBlock Text="表示・操作" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                    </Border>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="12,12,12,16">
+                            <Border Padding="12"
+                                    Background="{DynamicResource AppSurfaceAltBrush}"
+                                    BorderBrush="{DynamicResource AppBorderSoftBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="10">
+                                <StackPanel>
+                                    <TextBlock Text="状態" FontSize="10" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                                    <TextBlock Text="{Binding SaveStateLabel}" FontSize="11"
+                                               Foreground="{DynamicResource AppTextPrimaryBrush}" Margin="0,8,0,0"/>
+                                    <TextBlock Text="{Binding FilterSummary}" FontSize="10"
+                                               Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,4,0,0"/>
+                                    <TextBlock FontSize="10" Foreground="{DynamicResource AppWarningTextBrush}" Margin="0,4,0,0">
+                                        <Run Text="Critical path: "/>
+                                        <Run Text="{Binding CriticalPathDuration, Converter={StaticResource HmsConv}}"/>
+                                    </TextBlock>
+
+                                    <TextBlock Text="検索" FontSize="10" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,14,0,4"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Style="{StaticResource InputBox}" FontSize="11"
+                                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <Button Grid.Column="1" Content="◀" Style="{StaticResource FlatBtn}" Padding="8,4" Margin="4,0,0,0"
+                                                Command="{Binding SelectPreviousMatchCommand}"/>
+                                        <Button Grid.Column="2" Content="▶" Style="{StaticResource FlatBtn}" Padding="8,4" Margin="4,0,0,0"
+                                                Command="{Binding SelectNextMatchCommand}"/>
+                                    </Grid>
+
+                                    <TextBlock Text="絞り込み" FontSize="10" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,12,0,4"/>
+                                    <ComboBox ItemsSource="{Binding CategoriesForFilter}"
+                                              SelectedItem="{Binding SelectedFilterCategory, Mode=TwoWay}"
+                                              Style="{StaticResource InputComboBox}"
+                                              FontSize="11"
+                                              VerticalContentAlignment="Center">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:CategoryViewModel}">
+                                                <TextBlock Text="{Binding Name}" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <CheckBox Margin="0,8,0,0"
+                                              VerticalAlignment="Center"
+                                              FontSize="11"
+                                              Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                              Cursor="Hand"
+                                              Content="エラーのみ"
+                                              IsChecked="{Binding ShowErrorsOnly}"/>
+                                    <Button Content="フィルタをクリア" Margin="0,8,0,0"
+                                            Style="{StaticResource FlatBtn}" FontSize="11" Padding="8,4"
+                                            Command="{Binding ClearFiltersCommand}"/>
+
+                                    <TextBlock Text="ズーム" FontSize="10" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,14,0,4"/>
+                                    <WrapPanel VerticalAlignment="Center">
+                                        <Button Content="－" Style="{StaticResource FlatBtn}" FontSize="11" Padding="8,4"
+                                                Command="{Binding ZoomOutCommand}"/>
+                                        <Border Background="{DynamicResource AppSurfaceBrush}"
+                                                BorderBrush="{DynamicResource AppBorderSoftBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="6"
+                                                Padding="10,4"
+                                                Margin="6,0">
+                                            <TextBlock Text="{Binding ZoomPercent, StringFormat={}{0:0}%}"
+                                                       Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                                       FontSize="11"
+                                                       FontWeight="SemiBold"/>
+                                        </Border>
+                                        <Button Content="＋" Style="{StaticResource FlatBtn}" FontSize="11" Padding="8,4"
+                                                Command="{Binding ZoomInCommand}"/>
+                                        <Button Content="100%" Style="{StaticResource FlatBtn}" FontSize="11" Padding="8,4" Margin="6,0,0,0"
+                                                Command="{Binding ResetZoomCommand}"/>
+                                    </WrapPanel>
+
+                                    <TextBlock Text="操作" FontSize="10" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,14,0,4"/>
+                                    <WrapPanel>
+                                        <Button Content="元に戻す" Style="{StaticResource FlatBtn}" FontSize="11" Padding="8,4"
+                                                Command="{Binding UndoLastActionCommand}"/>
+                                        <Button Content="やり直す" Style="{StaticResource FlatBtn}" FontSize="11" Padding="8,4" Margin="6,0,0,0"
+                                                Command="{Binding RedoLastActionCommand}"/>
+                                        <Button Content="依存で整列" Style="{StaticResource FlatBtn}" FontSize="11" Padding="8,4" Margin="6,0,0,0"
+                                                Command="{Binding AutoArrangeByDependenciesCommand}"/>
+                                    </WrapPanel>
+
+                                    <TextBlock Text="書き出し" FontSize="10" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,14,0,4"/>
+                                    <WrapPanel>
+                                        <Button Content="CSV" Style="{StaticResource FlatBtn}" FontSize="11" Padding="8,4"
+                                                Command="{Binding ExportCsvCommand}"/>
+                                        <Button Content="Markdown" Style="{StaticResource FlatBtn}" FontSize="11" Padding="8,4" Margin="6,0,0,0"
+                                                Command="{Binding ExportMarkdownCommand}"/>
+                                        <Button Content="PNG" Style="{StaticResource FlatBtn}" FontSize="11" Padding="8,4" Margin="6,0,0,0"
+                                                Command="{Binding RequestExportPngCommand}"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
                 </Grid>
 
                 <!-- Panel: アプリ設定 -->
@@ -1164,20 +1292,23 @@
             <!-- ── RIGHT: Gantt canvas ── -->
             <Grid Grid.Column="3">
                 <controls:GanttCanvas x:Name="GanttView"
-                                      ItemsSource="{Binding Items}"
-                                      Edges="{Binding DependencyEdges}"
+                                      ItemsSource="{Binding FilteredItems}"
+                                      Edges="{Binding FilteredDependencyEdges}"
                                       SelectedItem="{Binding SelectedItem}"
                                       Lanes="{Binding Lanes}"
                                       Categories="{Binding Categories}"
                                       TimeUnit="{Binding TimeUnit}"
                                       CellDuration="{Binding CellDuration}"
                                       TotalDuration="{Binding TotalDuration}"
+                                      PixelsPerUnit="{Binding PixelsPerUnit}"
                                       CursorLaneIndex="{Binding CursorLaneIndex}"
                                       CursorTime="{Binding CursorTime}"
                                       IsVisualMode="{Binding IsVisualMode}"
                                       IsVisualLineMode="{Binding IsVisualLineMode}"
                                       VisualAnchorLane="{Binding VisualAnchorLane}"
+                                      CriticalPathItemIds="{Binding CriticalPathItemIds}"
                                       />
+
                 <!-- Visual mode indicator -->
                 <Border HorizontalAlignment="Left" VerticalAlignment="Bottom"
                         Margin="10,0,0,10" Padding="8,3" CornerRadius="4"

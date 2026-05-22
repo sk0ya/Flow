@@ -10,12 +10,22 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Flow.Converters;
 using Flow.Services;
 using Flow.ViewModels;
 
 namespace Flow.Views.Controls;
+
+public record TimelineEditChange(
+    ItemViewModel Item,
+    double OldStartTime,
+    double NewStartTime,
+    double OldDuration,
+    double NewDuration,
+    Guid OldLaneId,
+    Guid NewLaneId);
 
 public partial class GanttCanvas : UserControl
 {
@@ -69,6 +79,9 @@ public partial class GanttCanvas : UserControl
     public static readonly DependencyProperty VisualAnchorLaneProperty =
         DependencyProperty.Register(nameof(VisualAnchorLane), typeof(int),
             typeof(GanttCanvas), new PropertyMetadata(-1, (d, _) => ((GanttCanvas)d).Render()));
+    public static readonly DependencyProperty CriticalPathItemIdsProperty =
+        DependencyProperty.Register(nameof(CriticalPathItemIds), typeof(IEnumerable<Guid>),
+            typeof(GanttCanvas), new PropertyMetadata(null, OnAnyChanged));
 
     public IEnumerable<ItemViewModel>? ItemsSource
     { get => (IEnumerable<ItemViewModel>?)GetValue(ItemsSourceProperty); set => SetValue(ItemsSourceProperty, value); }
@@ -98,6 +111,8 @@ public partial class GanttCanvas : UserControl
     { get => (bool)GetValue(IsVisualLineModeProperty);  set => SetValue(IsVisualLineModeProperty, value); }
     public int    VisualAnchorLane
     { get => (int)GetValue(VisualAnchorLaneProperty);   set => SetValue(VisualAnchorLaneProperty, value); }
+    public IEnumerable<Guid>? CriticalPathItemIds
+    { get => (IEnumerable<Guid>?)GetValue(CriticalPathItemIdsProperty); set => SetValue(CriticalPathItemIdsProperty, value); }
 
     // ── Layout constants ──────────────────────────────────────────────────
     private double _laneHeaderW  = 150;
@@ -145,11 +160,13 @@ public partial class GanttCanvas : UserControl
     // Resize drag state: original positions and touching chain
     private Dictionary<Guid, double> _dragLaneOriginalStarts = new();
     private List<ItemViewModel> _dragTouchingChain = new();
+    private readonly Dictionary<Guid, (double StartTime, double Duration, Guid LaneId)> _dragOriginalStates = new();
 
     // Lane rename state
     private LaneViewModel? _renamingLane;
     private TextBox?       _renameBox;
     private HwndSource?    _hwndSource;
+    private string         _renamingLaneOldName = "";
 
     // Task rename state
     private ItemViewModel? _renamingItem;
@@ -162,10 +179,14 @@ public partial class GanttCanvas : UserControl
     public Func<Guid, double, ItemViewModel?>? AddItemAtFunc { get; set; }
     public Action<ItemViewModel>? DiscardItemFunc { get; set; }
     public Action<int, int>? ReorderLanesCallback { get; set; }
+    public Action<LaneViewModel, int>?            LaneCreatedFunc          { get; set; }
+    public Action<LaneViewModel, int>?            LaneCreatedDuringMoveFunc { get; set; }
 
     // Undo/redo hooks: fired after rename is committed (not cancelled)
     public Action<ItemViewModel>?                       ItemCreatedCommittedFunc { get; set; }
     public Action<ItemViewModel, string, string>?       ItemRenamedFunc          { get; set; }
+    public Action<IReadOnlyList<TimelineEditChange>>?   ItemTimelineChangedFunc  { get; set; }
+    public Action<LaneViewModel, string, string>?       LaneRenamedFunc          { get; set; }
 
     public bool IsEditing => IsRenaming;
 
@@ -209,6 +230,25 @@ public partial class GanttCanvas : UserControl
             TimelineScrollViewer.ScrollToVerticalOffset(laneTop);
         else if (laneBottom > vOffset + viewH)
             TimelineScrollViewer.ScrollToVerticalOffset(laneBottom - viewH);
+    }
+
+    public void ExportViewportPng(string filePath)
+    {
+        UpdateLayout();
+        Render();
+
+        int pixelWidth = Math.Max(1, (int)Math.Ceiling(ActualWidth));
+        int pixelHeight = Math.Max(1, (int)Math.Ceiling(ActualHeight));
+        double dpi = 96;
+
+        var bitmap = new RenderTargetBitmap(pixelWidth, pixelHeight, dpi, dpi, PixelFormats.Pbgra32);
+        bitmap.Render(this);
+
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+
+        using var stream = System.IO.File.Create(filePath);
+        encoder.Save(stream);
     }
 
     public void StartRenameSelectedItem(bool discardOnCancel = false)
@@ -726,6 +766,7 @@ public partial class GanttCanvas : UserControl
     {
         if (!_barRects.TryGetValue(item.Id, out var r)) return;
         bool selected = SelectedItem?.Id == item.Id;
+        bool isCritical = CriticalPathItemIds?.Contains(item.Id) == true;
         var palette = ThemeService.CurrentPalette;
 
         var category = item.CategoryId != Guid.Empty
@@ -747,8 +788,12 @@ public partial class GanttCanvas : UserControl
             Opacity = ghost ? 0.22 : 1.0,
             BorderBrush = selected
                 ? palette.TextPrimary
-                : (item.HasErrors ? palette.Danger : Brushes.Transparent),
-            BorderThickness = selected ? new Thickness(2) : new Thickness(item.HasErrors ? 1.5 : 0),
+                : item.HasErrors
+                    ? palette.Danger
+                    : isCritical ? palette.Warning : Brushes.Transparent,
+            BorderThickness = selected
+                ? new Thickness(2)
+                : new Thickness(item.HasErrors ? 1.5 : isCritical ? 1.5 : 0),
             Cursor = Cursors.SizeAll,
             ToolTip = BuildTooltip(item),
             ClipToBounds = true,
@@ -780,6 +825,19 @@ public partial class GanttCanvas : UserControl
                 CornerRadius = new CornerRadius(0, 5, 5, 0),
                 Cursor = Cursors.SizeWE,
             }, r.Right - ResizeW, r.Top);
+        }
+
+        if (!ghost && isCritical)
+        {
+            Add(new Rectangle
+            {
+                Width = Math.Max(8, r.Width - 10),
+                Height = 3,
+                Fill = palette.Warning,
+                RadiusX = 1.5,
+                RadiusY = 1.5,
+                Opacity = 0.9,
+            }, r.Left + 5, r.Top + 3);
         }
     }
 
@@ -1072,7 +1130,11 @@ public partial class GanttCanvas : UserControl
     private void OnAddLaneZoneClick(object sender, MouseButtonEventArgs e)
     {
         if (_drag != DragMode.None) return;
-        AddLaneFunc?.Invoke();
+        if (AddLaneFunc != null)
+        {
+            AddLaneFunc.Invoke();
+            NotifyLaneCreated(LaneCreatedFunc);
+        }
         e.Handled = true;
     }
 
@@ -1134,6 +1196,7 @@ public partial class GanttCanvas : UserControl
     private void StartLaneRename(LaneViewModel lane, int laneIndex)
     {
         _renamingLane = lane;
+        _renamingLaneOldName = lane.Name;
 
         double boxY = laneIndex * LaneH - TimelineScrollViewer.VerticalOffset + (LaneH - 24) / 2.0;
 
@@ -1175,7 +1238,12 @@ public partial class GanttCanvas : UserControl
         if (!cancel)
         {
             var name = renameBox.Text.Trim();
-            if (!string.IsNullOrEmpty(name)) lane.Name = name;
+            if (!string.IsNullOrEmpty(name))
+            {
+                lane.Name = name;
+                if (name != _renamingLaneOldName)
+                    LaneRenamedFunc?.Invoke(lane, _renamingLaneOldName, name);
+            }
         }
 
         if (renameBox.Parent is Panel panel)
@@ -1600,6 +1668,8 @@ public partial class GanttCanvas : UserControl
         _dragOriginDuration = item.Duration;
         _dragLaneIdx        = GetLaneIndex(pos.Y);
         _pendingMouseDownPos = pos;
+        _dragOriginalStates.Clear();
+        _dragOriginalStates[item.Id] = (item.StartTime, item.Duration, item.LaneId);
 
         if (_barRects.TryGetValue(item.Id, out r) && pos.X >= r.Right - ResizeW)
         {
@@ -1609,6 +1679,11 @@ public partial class GanttCanvas : UserControl
                             i.StartTime >= itemEnd - 1e-9)
                 .ToDictionary(i => i.Id, i => i.StartTime)
                 ?? new Dictionary<Guid, double>();
+            foreach (var other in (ItemsSource ?? Enumerable.Empty<ItemViewModel>())
+                         .Where(i => i.LaneId == item.LaneId && i.StartTime >= item.StartTime - 1e-9))
+            {
+                _dragOriginalStates[other.Id] = (other.StartTime, other.Duration, other.LaneId);
+            }
 
             _dragTouchingChain = new List<ItemViewModel>();
             double chainFront = itemEnd;
@@ -1633,6 +1708,10 @@ public partial class GanttCanvas : UserControl
                 ? (pos.X - barRect.Left) / GetPixelsPerSecond()
                 : 0;
             _pendingDrag = PendingDragType.Move;
+            foreach (var candidate in ItemsSource ?? Enumerable.Empty<ItemViewModel>())
+            {
+                _dragOriginalStates.TryAdd(candidate.Id, (candidate.StartTime, candidate.Duration, candidate.LaneId));
+            }
         }
 
         RootCanvas.CaptureMouse();
@@ -1775,7 +1854,10 @@ public partial class GanttCanvas : UserControl
         if (pos.Y >= addLaneTop && pos.Y <= addLaneTop + AddLaneZoneH)
         {
             if (_drag == DragMode.None)
+            {
                 AddLaneFunc?.Invoke();
+                NotifyLaneCreated(LaneCreatedFunc);
+            }
             e.Handled = true;
             return;
         }
@@ -1825,6 +1907,8 @@ public partial class GanttCanvas : UserControl
 
     private void CommitDrag()
     {
+        var timelineChanges = new List<TimelineEditChange>();
+
         if (_drag == DragMode.LaneReorder)
         {
             var lanes = Lanes?.ToList() ?? new List<LaneViewModel>();
@@ -1855,6 +1939,7 @@ public partial class GanttCanvas : UserControl
         {
             var newLaneId = AddLaneFunc();
             _dragItem.LaneId = newLaneId;
+            NotifyLaneCreated(LaneCreatedDuringMoveFunc);
         }
         else if (_dragItem != null && _drag == DragMode.Move)
         {
@@ -1864,9 +1949,39 @@ public partial class GanttCanvas : UserControl
         _pendingDrag = PendingDragType.None;
         _dragToNewLane = false;
         _drag = DragMode.None;
+
+        if (_dragOriginalStates.Count > 0)
+        {
+            foreach (var item in ItemsSource ?? Enumerable.Empty<ItemViewModel>())
+            {
+                if (!_dragOriginalStates.TryGetValue(item.Id, out var original))
+                    continue;
+
+                if (Math.Abs(original.StartTime - item.StartTime) < 1e-9
+                    && Math.Abs(original.Duration - item.Duration) < 1e-9
+                    && original.LaneId == item.LaneId)
+                {
+                    continue;
+                }
+
+                timelineChanges.Add(new TimelineEditChange(
+                    item,
+                    original.StartTime,
+                    item.StartTime,
+                    original.Duration,
+                    item.Duration,
+                    original.LaneId,
+                    item.LaneId));
+            }
+        }
+
+        if (timelineChanges.Count > 0)
+            ItemTimelineChangedFunc?.Invoke(timelineChanges);
+
         _dragItem = null;
         _dragLaneOriginalStarts.Clear();
         _dragTouchingChain.Clear();
+        _dragOriginalStates.Clear();
 
         if (RootCanvas.IsMouseCaptured) RootCanvas.ReleaseMouseCapture();
         if (FrozenLaneCanvas.IsMouseCaptured) FrozenLaneCanvas.ReleaseMouseCapture();
@@ -1944,11 +2059,15 @@ public partial class GanttCanvas : UserControl
 
         var pos = e.GetPosition(RootCanvas);
         var item = HitTestItem(pos);
-        if (item == null) return;
+        if (item != null)
+            SelectedItem = item;
 
-        SelectedItem = item;
+        var menu = item != null
+            ? BuildBarContextMenu(item)
+            : BuildCanvasContextMenu();
+        if (menu.Items.Count == 0)
+            return;
 
-        var menu = BuildBarContextMenu(item);
         menu.PlacementTarget = RootCanvas;
         menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
         menu.IsOpen = true;
@@ -2026,7 +2145,51 @@ public partial class GanttCanvas : UserControl
         }
         menu.Items.Add(MakeAddConditionItem(menu, palette, val => item.PostConditions.Add(new ConditionEntry(val))));
 
+        AppendCanvasToolMenuItems(menu, palette);
         return menu;
+    }
+
+    private ContextMenu BuildCanvasContextMenu()
+    {
+        var palette = ThemeService.CurrentPalette;
+        var menu = new ContextMenu();
+        AppendCanvasToolMenuItems(menu, palette);
+        return menu;
+    }
+
+    private void AppendCanvasToolMenuItems(ContextMenu menu, ThemePalette palette)
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        if (menu.Items.Count > 0)
+            menu.Items.Add(new Separator());
+
+        menu.Items.Add(MakeMenuLabel("表示・操作", palette));
+        menu.Items.Add(new MenuItem { Header = "元に戻す", Command = vm.UndoLastActionCommand });
+        menu.Items.Add(new MenuItem { Header = "やり直す", Command = vm.RedoLastActionCommand });
+        menu.Items.Add(new Separator());
+        menu.Items.Add(new MenuItem { Header = "ズームイン", Command = vm.ZoomInCommand, IsEnabled = vm.CanZoomIn });
+        menu.Items.Add(new MenuItem { Header = "ズームアウト", Command = vm.ZoomOutCommand, IsEnabled = vm.CanZoomOut });
+        menu.Items.Add(new MenuItem { Header = "ズームを 100% に戻す", Command = vm.ResetZoomCommand });
+        menu.Items.Add(new Separator());
+        menu.Items.Add(new MenuItem { Header = "依存で整列", Command = vm.AutoArrangeByDependenciesCommand });
+
+        var showErrorsOnlyItem = new MenuItem
+        {
+            Header = "エラーのみ",
+            IsCheckable = true,
+            IsChecked = vm.ShowErrorsOnly,
+            StaysOpenOnClick = true,
+        };
+        showErrorsOnlyItem.Click += (_, _) => vm.ShowErrorsOnly = showErrorsOnlyItem.IsChecked;
+        menu.Items.Add(showErrorsOnlyItem);
+        menu.Items.Add(new MenuItem { Header = "フィルタをクリア", Command = vm.ClearFiltersCommand });
+
+        menu.Items.Add(new Separator());
+        menu.Items.Add(new MenuItem { Header = "CSV を書き出し", Command = vm.ExportCsvCommand });
+        menu.Items.Add(new MenuItem { Header = "Markdown を書き出し", Command = vm.ExportMarkdownCommand });
+        menu.Items.Add(new MenuItem { Header = "PNG を書き出し", Command = vm.RequestExportPngCommand });
     }
 
     private static MenuItem MakeMenuLabel(string text, ThemePalette palette) => new()
@@ -2281,4 +2444,16 @@ public partial class GanttCanvas : UserControl
         new() { X1 = x1, Y1 = y, X2 = x2, Y2 = y, Stroke = stroke, StrokeThickness = sw };
 
     private static string FormatTimelineValue(double value) => value.ToString("0.####");
+
+    private void NotifyLaneCreated(Action<LaneViewModel, int>? callback)
+    {
+        if (callback == null)
+            return;
+
+        var lanes = Lanes?.ToList() ?? new List<LaneViewModel>();
+        if (lanes.Count == 0)
+            return;
+
+        callback(lanes[^1], lanes.Count - 1);
+    }
 }

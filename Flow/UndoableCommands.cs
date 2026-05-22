@@ -85,6 +85,32 @@ public sealed class RemoveLaneCommand : IUndoableCommand
     }
 }
 
+public sealed class ReorderLaneCommand : IUndoableCommand
+{
+    private readonly ObservableCollection<LaneViewModel> _lanes;
+    private readonly int _fromIndex;
+    private readonly int _toIndex;
+
+    public ReorderLaneCommand(ObservableCollection<LaneViewModel> lanes, int fromIndex, int toIndex)
+    {
+        _lanes = lanes;
+        _fromIndex = fromIndex;
+        _toIndex = toIndex;
+    }
+
+    public void Undo()
+    {
+        if (_toIndex < 0 || _toIndex >= _lanes.Count) return;
+        _lanes.Move(_toIndex, _fromIndex);
+    }
+
+    public void Redo()
+    {
+        if (_fromIndex < 0 || _fromIndex >= _lanes.Count) return;
+        _lanes.Move(_fromIndex, _toIndex);
+    }
+}
+
 public sealed class CompositeCommand(IReadOnlyList<IUndoableCommand> commands) : IUndoableCommand
 {
     public void Undo() { foreach (var cmd in commands.Reverse()) cmd.Undo(); }
