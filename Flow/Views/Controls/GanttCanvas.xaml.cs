@@ -628,6 +628,9 @@ public partial class GanttCanvas : UserControl
             DrawBar(item, isGhost);
         }
 
+        // 9.5. Selection outlines are drawn above tasks so the current cell stays visible.
+        DrawSelectionOverlays(nLanes, totalW, pps);
+
         // 10. Drag ghost
         if (_drag == DragMode.Move && _dragItem != null)
             DrawDragGhost(_dragItem, ppu);
@@ -653,6 +656,91 @@ public partial class GanttCanvas : UserControl
         RootCanvas.Height = totalH;
 
         RenderFrozenLayers();
+    }
+
+    private void DrawSelectionOverlays(int nLanes, double totalW, double pps)
+    {
+        if (_drag != DragMode.None || nLanes <= 0)
+            return;
+
+        int cl = Math.Clamp(CursorLaneIndex, 0, nLanes - 1);
+        double cellW = Math.Max(GetGridStepInSeconds() * pps, 2);
+        var palette = ThemeService.CurrentPalette;
+        var accentColor = ((SolidColorBrush)palette.Accent).Color;
+
+        if (IsVisualLineMode && VisualAnchorLane >= 0)
+        {
+            int anchorLane = Math.Clamp(VisualAnchorLane, 0, nLanes - 1);
+            int selStart = Math.Min(cl, anchorLane);
+            int selEnd = Math.Max(cl, anchorLane);
+            AddSelectionOutline(0, selStart * LaneH, totalW, (selEnd - selStart + 1) * LaneH, accentColor, dashed: true);
+        }
+        else if (IsVisualMode && VisualAnchorLane >= 0 && !double.IsNaN(VisualAnchorTime))
+        {
+            int anchorLane = Math.Clamp(VisualAnchorLane, 0, nLanes - 1);
+            int selStartLane = Math.Min(cl, anchorLane);
+            int selEndLane = Math.Max(cl, anchorLane);
+            double selLeft = Math.Min(VisualAnchorTime, CursorTime) * pps;
+            double selRight = (Math.Max(VisualAnchorTime, CursorTime) + GetGridStepInSeconds()) * pps;
+            AddSelectionOutline(
+                selLeft,
+                selStartLane * LaneH,
+                Math.Max(selRight - selLeft, cellW),
+                (selEndLane - selStartLane + 1) * LaneH,
+                accentColor,
+                dashed: true);
+        }
+
+        AddSelectionOutline(CursorTime * pps, cl * LaneH, cellW, LaneH, accentColor, dashed: false);
+    }
+
+    private void AddSelectionOutline(double x, double y, double width, double height, Color accentColor, bool dashed)
+    {
+        width = Math.Max(width, 2);
+        height = Math.Max(height, 2);
+
+        Add(new Rectangle
+        {
+            Width = width,
+            Height = height,
+            Fill = new SolidColorBrush(Color.FromArgb(26, accentColor.R, accentColor.G, accentColor.B)),
+            IsHitTestVisible = false,
+        }, x, y);
+        AddSelectionRectangle(x, y, width, height,
+            new SolidColorBrush(Color.FromArgb(185, 0, 0, 0)), 5.0, null);
+        AddSelectionRectangle(x, y, width, height,
+            new SolidColorBrush(Color.FromArgb(235, 255, 255, 255)), 3.0, null);
+        AddSelectionRectangle(x, y, width, height,
+            new SolidColorBrush(Color.FromArgb(245, accentColor.R, accentColor.G, accentColor.B)),
+            dashed ? 2.0 : 2.4,
+            dashed ? new DoubleCollection { 5, 3 } : null);
+    }
+
+    private void AddSelectionRectangle(
+        double x,
+        double y,
+        double width,
+        double height,
+        Brush stroke,
+        double strokeThickness,
+        DoubleCollection? dashArray)
+    {
+        var rectangle = new Rectangle
+        {
+            Width = width,
+            Height = height,
+            Fill = Brushes.Transparent,
+            Stroke = stroke,
+            StrokeThickness = strokeThickness,
+            RadiusX = 2,
+            RadiusY = 2,
+            IsHitTestVisible = false,
+        };
+
+        if (dashArray != null)
+            rectangle.StrokeDashArray = dashArray;
+
+        Add(rectangle, x, y);
     }
 
     private void RenderFrozenLayers()
@@ -835,21 +923,20 @@ public partial class GanttCanvas : UserControl
 
     // ── Bar rendering ─────────────────────────────────────────────────────
 
-    private (Brush Fill, Brush TextFill) ResolveBarStyle(ItemViewModel item)
+    private (Brush Fill, Brush TextFill, Brush Border, double BorderThickness) ResolveBarStyle(ItemViewModel item)
     {
         var palette = ThemeService.CurrentPalette;
         var category = item.CategoryId != Guid.Empty
             ? Categories?.FirstOrDefault(c => c.Id == item.CategoryId)
             : null;
 
-        Brush fill = item.HasErrors
-            ? palette.DangerSoft
-            : category?.Brush ?? palette.Accent;
-        Brush textFill = item.HasErrors || category == null
-            ? palette.AccentText
-            : ColorBrushService.CreateReadableTextBrush(category.ColorValue);
+        if (item.HasErrors)
+            return (palette.DangerSoft, palette.AccentText, palette.Danger, 1.5);
 
-        return (fill, textFill);
+        if (category != null)
+            return (category.Brush, ColorBrushService.CreateReadableTextBrush(category.ColorValue), Brushes.Transparent, 0);
+
+        return (palette.NeutralSurface, palette.TextPrimary, palette.BorderStrong, 1);
     }
 
     private static TextBlock CreateBarText(string text, Brush foreground) => new()
@@ -1019,10 +1106,8 @@ public partial class GanttCanvas : UserControl
         }
 
         var bar = CreateBarBorder(r.Width, r.Height, style.Fill, ghost ? 0.22 : 1.0);
-        bar.BorderBrush = item.HasErrors
-            ? palette.Danger
-            : isSearchMatch ? palette.AccentOutline : Brushes.Transparent;
-        bar.BorderThickness = new Thickness(item.HasErrors || isSearchMatch ? 1.5 : 0);
+        bar.BorderBrush = isSearchMatch ? palette.AccentOutline : style.Border;
+        bar.BorderThickness = new Thickness(isSearchMatch ? 1.5 : style.BorderThickness);
         bar.Cursor = Cursors.SizeAll;
         bar.ToolTip = BuildTooltip(item);
 
