@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Windows.Input;
 using Flow.ViewModels;
 using Flow.Views.Controls;
@@ -48,6 +46,9 @@ public sealed class VimController
     public bool TryExitMode()
         => _engine.TryExitToNormalMode();
 
+    public bool TryCancelPendingInput()
+        => _engine.TryCancelPendingInput();
+
     public void HandleDiscardedNewItem(ItemViewModel item)
     {
         _viewModel.DiscardNewItem(item);
@@ -93,6 +94,8 @@ public sealed class VimController
         _engine.Register("e", VimCommands.WordEnd);
         _engine.Register("0", VimCommands.GoLineStart);
         _engine.Register("$", VimCommands.GoLineEnd);
+        _engine.Register("n", ctx => ctx.ViewModel.SelectNextMatchCommand.Execute(null));
+        _engine.Register("N", ctx => ctx.ViewModel.SelectPreviousMatchCommand.Execute(null));
 
         // Duration / move
         _engine.Register("+", VimCommands.DurationGrow);
@@ -116,10 +119,10 @@ public sealed class VimController
         // Visual mode
         _engine.Register("v", EnterVisualMode);
         _engine.Register("V", EnterVisualLineMode);
-        _engine.Register(VimMode.Visual, "d", ctx => ExecuteAndReturnToNormal(ctx, VimCommands.DeleteTask));
-        _engine.Register(VimMode.Visual, "y", ctx => ExecuteAndReturnToNormal(ctx, VimCommands.YankTask));
-        _engine.Register(VimMode.VisualLine, "d", DeleteVisualLineSelection);
-        _engine.Register(VimMode.VisualLine, "y", ctx => ExecuteAndReturnToNormal(ctx, VimCommands.YankLane));
+        _engine.Register(VimMode.Visual, "d", ctx => ExecuteAndReturnToNormal(ctx, VimCommands.DeleteVisualSelection));
+        _engine.Register(VimMode.Visual, "y", ctx => ExecuteAndReturnToNormal(ctx, VimCommands.YankVisualSelection));
+        _engine.Register(VimMode.VisualLine, "d", ctx => ExecuteAndReturnToNormal(ctx, VimCommands.DeleteVisualLineSelection));
+        _engine.Register(VimMode.VisualLine, "y", ctx => ExecuteAndReturnToNormal(ctx, VimCommands.YankVisualLineSelection));
         _engine.Register(VimMode.VisualLine, "k", MoveVisualLineUp);
         _engine.Register(VimMode.VisualLine, "j", MoveVisualLineDown);
         _engine.Register(VimMode.VisualLine, "h", _ => { });
@@ -147,11 +150,16 @@ public sealed class VimController
         };
 
         if (mode == VimMode.Normal)
+        {
             _viewModel.VisualAnchorLane = -1;
+            _viewModel.VisualAnchorTime = double.NaN;
+        }
     }
 
     private void EnterVisualMode(VimContext ctx)
     {
+        _viewModel.VisualAnchorLane = _viewModel.CursorLaneIndex;
+        _viewModel.VisualAnchorTime = _viewModel.CursorTime;
         _engine.SetMode(VimMode.Visual);
         ctx.SyncSelection();
     }
@@ -159,6 +167,7 @@ public sealed class VimController
     private void EnterVisualLineMode(VimContext ctx)
     {
         _viewModel.VisualAnchorLane = _viewModel.CursorLaneIndex;
+        _viewModel.VisualAnchorTime = double.NaN;
         _engine.SetMode(VimMode.VisualLine);
     }
 
@@ -184,47 +193,6 @@ public sealed class VimController
 
         _viewModel.CursorLaneIndex++;
         ctx.GanttView.ScrollCursorIntoView();
-    }
-
-    private void DeleteVisualLineSelection(VimContext ctx)
-    {
-        int anchor = Math.Clamp(_viewModel.VisualAnchorLane, 0, _viewModel.Lanes.Count - 1);
-        int cursor = Math.Clamp(_viewModel.CursorLaneIndex, 0, _viewModel.Lanes.Count - 1);
-        int selStart = Math.Min(anchor, cursor);
-        int selEnd = Math.Max(anchor, cursor);
-
-        var lanesToDelete = Enumerable.Range(selStart, selEnd - selStart + 1)
-            .Select(i => _viewModel.Lanes.ElementAtOrDefault(i))
-            .Where(l => l != null)
-            .ToList();
-
-        var commands = new List<IUndoableCommand>();
-        foreach (var lane in lanesToDelete)
-        {
-            foreach (var item in _viewModel.Items.Where(i => i.LaneId == lane!.Id).ToList())
-            {
-                if (_viewModel.SelectedItem?.Id == item.Id)
-                    _viewModel.SelectedItem = null;
-
-                _viewModel.Items.Remove(item);
-                commands.Add(new RemoveItemCommand(_viewModel.Items, item));
-            }
-        }
-
-        foreach (var lane in lanesToDelete)
-        {
-            if (_viewModel.Lanes.Count <= 1)
-                break;
-
-            int index = _viewModel.Lanes.IndexOf(lane!);
-            _viewModel.Lanes.Remove(lane!);
-            commands.Add(new RemoveLaneCommand(_viewModel.Lanes, lane!, index));
-        }
-
-        _viewModel.Analyze();
-        _viewModel.UndoRedo.Push(new CompositeCommand(commands));
-        _viewModel.CursorLaneIndex = Math.Min(selStart, _viewModel.Lanes.Count - 1);
-        _engine.SetMode(VimMode.Normal);
     }
 
     private void AddTask(VimContext ctx, VimAddMode mode)
@@ -265,10 +233,17 @@ public sealed class VimController
                 break;
             }
             case VimAddMode.LaneAbove:
-                if (_viewModel.CursorLaneIndex <= 0)
-                    return;
+                if (_viewModel.CursorLaneIndex > 0)
+                {
+                    laneId = _viewModel.Lanes[_viewModel.CursorLaneIndex - 1].Id;
+                }
+                else
+                {
+                    var newLane = _viewModel.InsertLaneAt(0);
+                    laneId = newLane.Id;
+                    _pendingNewLane = newLane;
+                }
 
-                laneId = _viewModel.Lanes[_viewModel.CursorLaneIndex - 1].Id;
                 startTime = _viewModel.CursorTime;
                 break;
             default:

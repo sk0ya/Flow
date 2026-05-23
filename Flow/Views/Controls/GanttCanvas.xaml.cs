@@ -79,6 +79,9 @@ public partial class GanttCanvas : UserControl
     public static readonly DependencyProperty VisualAnchorLaneProperty =
         DependencyProperty.Register(nameof(VisualAnchorLane), typeof(int),
             typeof(GanttCanvas), new PropertyMetadata(-1, (d, _) => ((GanttCanvas)d).Render()));
+    public static readonly DependencyProperty VisualAnchorTimeProperty =
+        DependencyProperty.Register(nameof(VisualAnchorTime), typeof(double),
+            typeof(GanttCanvas), new PropertyMetadata(double.NaN, (d, _) => ((GanttCanvas)d).Render()));
     public static readonly DependencyProperty CriticalPathItemIdsProperty =
         DependencyProperty.Register(nameof(CriticalPathItemIds), typeof(IEnumerable<Guid>),
             typeof(GanttCanvas), new PropertyMetadata(null, OnAnyChanged));
@@ -111,6 +114,8 @@ public partial class GanttCanvas : UserControl
     { get => (bool)GetValue(IsVisualLineModeProperty);  set => SetValue(IsVisualLineModeProperty, value); }
     public int    VisualAnchorLane
     { get => (int)GetValue(VisualAnchorLaneProperty);   set => SetValue(VisualAnchorLaneProperty, value); }
+    public double VisualAnchorTime
+    { get => (double)GetValue(VisualAnchorTimeProperty); set => SetValue(VisualAnchorTimeProperty, value); }
     public IEnumerable<Guid>? CriticalPathItemIds
     { get => (IEnumerable<Guid>?)GetValue(CriticalPathItemIdsProperty); set => SetValue(CriticalPathItemIdsProperty, value); }
 
@@ -256,6 +261,50 @@ public partial class GanttCanvas : UserControl
         var item = SelectedItem;
         if (item == null || IsRenaming) return;
         StartTaskRename(item, discardOnCancel);
+    }
+
+    public IReadOnlyList<TimelineEditChange> MoveTaskByKeyboard(ItemViewModel item, double deltaStart)
+    {
+        if (deltaStart == 0)
+            return [];
+
+        var originalStates = CaptureItemStates();
+        double proposedStart = NormalizeTimelineValue(item.StartTime + deltaStart);
+        item.StartTime = FindValidStart(item, proposedStart, item.LaneId);
+
+        var changes = CollectTimelineChanges(originalStates);
+        if (changes.Count > 0)
+            Render();
+
+        return changes;
+    }
+
+    public IReadOnlyList<TimelineEditChange> ResizeTaskByKeyboard(ItemViewModel item, double deltaDuration)
+    {
+        if (deltaDuration == 0)
+            return [];
+
+        var originalStates = CaptureItemStates();
+        var touchingChain = CollectTouchingChain(item);
+        double minDuration = Math.Max(GetGridStepInSeconds(), 1.0);
+        item.Duration = NormalizeTimelineValue(Math.Max(minDuration, item.Duration + deltaDuration));
+
+        double front = item.StartTime + item.Duration;
+        foreach (var task in touchingChain)
+        {
+            task.StartTime = NormalizeTimelineValue(front);
+            front = task.StartTime + task.Duration;
+        }
+
+        var chainIds = new HashSet<Guid>(touchingChain.Select(task => task.Id));
+        var lastAnchor = touchingChain.Count > 0 ? touchingChain[^1] : item;
+        PushSuccessors(lastAnchor, chainIds);
+
+        var changes = CollectTimelineChanges(originalStates);
+        if (changes.Count > 0)
+            Render();
+
+        return changes;
     }
 
     // ── Cached rects ──────────────────────────────────────────────────────
@@ -495,6 +544,22 @@ public partial class GanttCanvas : UserControl
                         BorderThickness = new Thickness(0, si == selStart ? 2 : 0, 0, si == selEnd ? 2 : 0),
                     }, 0, si * LaneH);
                 }
+            }
+            else if (IsVisualMode && VisualAnchorLane >= 0 && !double.IsNaN(VisualAnchorTime))
+            {
+                int anchorLane = Math.Clamp(VisualAnchorLane, 0, nLanes - 1);
+                int selStartLane = Math.Min(cl, anchorLane);
+                int selEndLane = Math.Max(cl, anchorLane);
+                double selLeft = Math.Min(VisualAnchorTime, CursorTime) * pps;
+                double selRight = (Math.Max(VisualAnchorTime, CursorTime) + GetGridStepInSeconds()) * pps;
+                Add(new Border
+                {
+                    Width = Math.Max(selRight - selLeft, cellW),
+                    Height = (selEndLane - selStartLane + 1) * LaneH,
+                    Background = new SolidColorBrush(Color.FromArgb(35, accentColor.R, accentColor.G, accentColor.B)),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(180, accentColor.R, accentColor.G, accentColor.B)),
+                    BorderThickness = new Thickness(2),
+                }, selLeft, selStartLane * LaneH);
             }
 
             // cursor cell: more prominent in visual mode
@@ -1458,6 +1523,62 @@ public partial class GanttCanvas : UserControl
         return luminance > 0.62
             ? new SolidColorBrush(Color.FromRgb(32, 33, 36))
             : Brushes.White;
+    }
+
+    private Dictionary<Guid, (double StartTime, double Duration, Guid LaneId)> CaptureItemStates()
+        => (ItemsSource ?? Enumerable.Empty<ItemViewModel>())
+            .ToDictionary(item => item.Id, item => (item.StartTime, item.Duration, item.LaneId));
+
+    private List<TimelineEditChange> CollectTimelineChanges(
+        IReadOnlyDictionary<Guid, (double StartTime, double Duration, Guid LaneId)> originalStates)
+    {
+        var changes = new List<TimelineEditChange>();
+        foreach (var item in ItemsSource ?? Enumerable.Empty<ItemViewModel>())
+        {
+            if (!originalStates.TryGetValue(item.Id, out var original))
+                continue;
+
+            if (Math.Abs(original.StartTime - item.StartTime) < 1e-9
+                && Math.Abs(original.Duration - item.Duration) < 1e-9
+                && original.LaneId == item.LaneId)
+            {
+                continue;
+            }
+
+            changes.Add(new TimelineEditChange(
+                item,
+                original.StartTime,
+                item.StartTime,
+                original.Duration,
+                item.Duration,
+                original.LaneId,
+                item.LaneId));
+        }
+
+        return changes;
+    }
+
+    private List<ItemViewModel> CollectTouchingChain(ItemViewModel item)
+    {
+        var chain = new List<ItemViewModel>();
+        double chainFront = item.StartTime + item.Duration;
+        foreach (var task in (ItemsSource ?? Enumerable.Empty<ItemViewModel>())
+                     .Where(candidate => candidate.LaneId == item.LaneId
+                                      && candidate.Id != item.Id
+                                      && candidate.StartTime >= item.StartTime - 1e-9)
+                     .OrderBy(candidate => candidate.StartTime))
+        {
+            if (task.StartTime > chainFront + 1e-9)
+                break;
+
+            if (Math.Abs(task.StartTime - chainFront) < 1e-9)
+            {
+                chain.Add(task);
+                chainFront = task.StartTime + task.Duration;
+            }
+        }
+
+        return chain;
     }
 
     // ── Successor push (resize cascade) ──────────────────────────────────

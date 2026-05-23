@@ -55,6 +55,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool   _isVisualMode      = false;
     [ObservableProperty] private bool   _isVisualLineMode  = false;
     [ObservableProperty] private int    _visualAnchorLane  = -1;
+    [ObservableProperty] private double _visualAnchorTime  = double.NaN;
     [ObservableProperty] private string _visualModeLabel   = "";
 
     [ObservableProperty] private string         _projectName = "新しいプロジェクト";
@@ -338,6 +339,13 @@ public partial class MainViewModel : ObservableObject
     {
         var lane = new LaneViewModel(NextLaneName());
         Lanes.Insert(Math.Clamp(index + 1, 0, Lanes.Count), lane);
+        return lane;
+    }
+
+    public LaneViewModel InsertLaneAt(int index, string? name = null)
+    {
+        var lane = new LaneViewModel(string.IsNullOrWhiteSpace(name) ? NextLaneName() : name);
+        Lanes.Insert(Math.Clamp(index, 0, Lanes.Count), lane);
         return lane;
     }
 

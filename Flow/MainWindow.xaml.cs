@@ -333,6 +333,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (e.Key == Key.Escape && _vim.TryCancelPendingInput())
+        {
+            e.Handled = true;
+            return;
+        }
+
         // Visual mode: Escape exits visual mode (without deselecting)
         if (e.Key == Key.Escape && _vim.TryExitMode())
         {

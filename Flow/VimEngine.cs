@@ -17,26 +17,52 @@ public enum VimMode
     VisualLine,
 }
 
+public sealed record VimTaskBlockClip(
+    List<Guid> LaneIds,
+    double StartTime,
+    double EndTime,
+    List<SequenceItem> Tasks);
+
+public sealed record VimLaneBlockClip(
+    List<Lane> Lanes,
+    List<SequenceItem> Items);
+
 public sealed class VimClipboard
 {
-    public enum ClipKind { None, Task, Lane }
+    public enum ClipKind { None, Task, TaskBlock, LaneBlock }
 
-    public ClipKind                               Kind { get; private set; } = ClipKind.None;
-    public SequenceItem?                          Task { get; private set; }
-    public (Lane lane, List<SequenceItem> items)? Lane { get; private set; }
+    public ClipKind          Kind      { get; private set; } = ClipKind.None;
+    public SequenceItem?     Task      { get; private set; }
+    public VimTaskBlockClip? TaskBlock { get; private set; }
+    public VimLaneBlockClip? LaneBlock { get; private set; }
 
     public void YankTask(SequenceItem task)
     {
         Task = task;
-        Lane = null;
+        TaskBlock = null;
+        LaneBlock = null;
         Kind = ClipKind.Task;
     }
 
     public void YankLane(Lane lane, List<SequenceItem> items)
     {
-        Lane = (lane, items);
+        YankLaneBlock([lane], items);
+    }
+
+    public void YankTaskBlock(List<Guid> laneIds, double startTime, double endTime, List<SequenceItem> tasks)
+    {
         Task = null;
-        Kind = ClipKind.Lane;
+        TaskBlock = new VimTaskBlockClip(laneIds, startTime, endTime, tasks);
+        LaneBlock = null;
+        Kind = ClipKind.TaskBlock;
+    }
+
+    public void YankLaneBlock(List<Lane> lanes, List<SequenceItem> items)
+    {
+        Task = null;
+        TaskBlock = null;
+        LaneBlock = new VimLaneBlockClip(lanes, items);
+        Kind = ClipKind.LaneBlock;
     }
 }
 
@@ -68,6 +94,60 @@ public sealed class VimContext(VimEngine engine, MainViewModel viewModel, GanttC
     {
         ViewModel.SetSelectionFromVim(TaskAtCursor());
         GanttView.ScrollCursorIntoView();
+    }
+
+    public int LaneIndex(Guid laneId)
+    {
+        for (int index = 0; index < ViewModel.Lanes.Count; index++)
+        {
+            if (ViewModel.Lanes[index].Id == laneId)
+                return index;
+        }
+
+        return -1;
+    }
+
+    public IReadOnlyList<ItemViewModel> VisualSelectionTasks()
+    {
+        if (ViewModel.VisualAnchorLane < 0 || double.IsNaN(ViewModel.VisualAnchorTime))
+            return [];
+
+        int maxLaneIndex = Math.Max(0, ViewModel.Lanes.Count - 1);
+        int anchorLane = Math.Clamp(ViewModel.VisualAnchorLane, 0, maxLaneIndex);
+        int cursorLane = Math.Clamp(ViewModel.CursorLaneIndex, 0, maxLaneIndex);
+        int minLane = Math.Min(anchorLane, cursorLane);
+        int maxLane = Math.Max(anchorLane, cursorLane);
+        double minTime = Math.Min(ViewModel.VisualAnchorTime, ViewModel.CursorTime);
+        double maxTime = Math.Max(ViewModel.VisualAnchorTime, ViewModel.CursorTime) + GridStep;
+
+        return ViewModel.Items
+            .Where(item =>
+            {
+                int laneIndex = LaneIndex(item.LaneId);
+                if (laneIndex < minLane || laneIndex > maxLane)
+                    return false;
+
+                double itemEnd = item.StartTime + item.Duration;
+                return item.StartTime < maxTime - 1e-9 && itemEnd > minTime + 1e-9;
+            })
+            .OrderBy(item => LaneIndex(item.LaneId))
+            .ThenBy(item => item.StartTime)
+            .ToList();
+    }
+
+    public IReadOnlyList<LaneViewModel> VisualLineSelectionLanes()
+    {
+        if (ViewModel.VisualAnchorLane < 0 || ViewModel.Lanes.Count == 0)
+            return [];
+
+        int anchorLane = Math.Clamp(ViewModel.VisualAnchorLane, 0, ViewModel.Lanes.Count - 1);
+        int cursorLane = Math.Clamp(ViewModel.CursorLaneIndex, 0, ViewModel.Lanes.Count - 1);
+        int start = Math.Min(anchorLane, cursorLane);
+        int end = Math.Max(anchorLane, cursorLane);
+
+        return Enumerable.Range(start, end - start + 1)
+            .Select(index => ViewModel.Lanes[index])
+            .ToList();
     }
 }
 
@@ -115,6 +195,8 @@ internal static class VimKeyNotation
         Key.E when !shift => "e",
         Key.G when !shift => "g",
         Key.G when  shift => "G",
+        Key.N when !shift => "n",
+        Key.N when  shift => "N",
         Key.U when !shift => "u",
         Key.V when !shift => "v",
         Key.V when  shift => "V",
@@ -179,6 +261,15 @@ public sealed class VimEngine
         }
 
         SetMode(VimMode.Normal);
+        return true;
+    }
+
+    public bool TryCancelPendingInput()
+    {
+        if (string.IsNullOrEmpty(_buffer))
+            return false;
+
+        ClearPendingInput();
         return true;
     }
 
