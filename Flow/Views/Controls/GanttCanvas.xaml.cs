@@ -497,7 +497,6 @@ public partial class GanttCanvas : UserControl
 
         var palette = ThemeService.CurrentPalette;
         Brush surface = palette.Surface;
-        Brush rowAccent = palette.AccentFaint;
         Brush gridMinor = palette.BorderSoft;
         Brush gridMajor = palette.Border;
         Brush divider = palette.BorderStrong;
@@ -520,13 +519,10 @@ public partial class GanttCanvas : UserControl
         // 1. Background
         Add(Rect(totalW, totalH, surface), 0, 0);
 
-        // 2. Alternating lane backgrounds and reorder source highlight
+        // 2. Reorder source highlight
         for (int i = 0; i < nLanes; i++)
         {
             double rowY = i * LaneH;
-            if (i % 2 == 0)
-                Add(Rect(totalW, LaneH, rowAccent), 0, rowY);
-
             if (_drag == DragMode.LaneReorder && _reorderSourceLane == i)
                 Add(new Rectangle
                 {
