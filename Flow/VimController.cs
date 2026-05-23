@@ -165,7 +165,9 @@ public sealed class VimController
         // Delete / yank / paste
         RegisterRepeatable(VimMode.Normal, "x", ExecuteDeleteTaskCommand, _ => repeatCtx => VimCommands.DeleteTaskAtOrAfterCursor(repeatCtx));
         RegisterRepeatable(VimMode.Normal, "diw", ExecuteDeleteTaskCommand, _ => repeatCtx => VimCommands.DeleteTaskAtOrAfterCursor(repeatCtx));
+        RegisterRepeatable(VimMode.Normal, "daw", VimCommands.DeleteTaskAtOrAfterCursor, _ => repeatCtx => VimCommands.DeleteTaskAtOrAfterCursor(repeatCtx));
         _engine.Register("yiw", VimCommands.YankTask);
+        _engine.Register("yaw", VimCommands.YankTaskAtOrAfterCursor);
         _engine.Register("yy", VimCommands.YankLane);
         RegisterRepeatable("dd", VimCommands.DeleteLane);
         RegisterRepeatable("p", VimCommands.PasteAfter);

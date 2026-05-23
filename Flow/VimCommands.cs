@@ -212,18 +212,7 @@ internal static class VimCommands
 
     internal static bool DeleteTaskAtOrAfterCursor(VimContext ctx)
     {
-        Guid laneId = ctx.CursorLaneId();
-        if (laneId == Guid.Empty)
-            return false;
-
-        double cursorTime = ctx.ViewModel.CursorTime;
-        var task = ctx.ViewModel.Items
-            .Where(item => item.LaneId == laneId)
-            .OrderBy(item => item.StartTime)
-            .FirstOrDefault(item =>
-                (item.StartTime <= cursorTime + 1e-9 && item.StartTime + item.Duration > cursorTime + 1e-9)
-                || item.StartTime >= cursorTime - 1e-9);
-
+        var task = ResolveTaskAtOrAfterCursor(ctx);
         return task != null && DeleteTasks(ctx, [task]);
     }
 
@@ -249,6 +238,13 @@ internal static class VimCommands
     internal static void YankTask(VimContext ctx)
     {
         var task = ctx.TaskAtCursor();
+        if (task == null) return;
+        ctx.Clipboard.YankTask(task.ToModel());
+    }
+
+    internal static void YankTaskAtOrAfterCursor(VimContext ctx)
+    {
+        var task = ResolveTaskAtOrAfterCursor(ctx);
         if (task == null) return;
         ctx.Clipboard.YankTask(task.ToModel());
     }
@@ -293,6 +289,21 @@ internal static class VimCommands
 
         var current = ctx.ViewModel.Lanes.ElementAtOrDefault(ctx.ViewModel.CursorLaneIndex);
         return current != null ? [current] : [];
+    }
+
+    private static ItemViewModel? ResolveTaskAtOrAfterCursor(VimContext ctx)
+    {
+        Guid laneId = ctx.CursorLaneId();
+        if (laneId == Guid.Empty)
+            return null;
+
+        double cursorTime = ctx.ViewModel.CursorTime;
+        return ctx.ViewModel.Items
+            .Where(item => item.LaneId == laneId)
+            .OrderBy(item => item.StartTime)
+            .FirstOrDefault(item =>
+                (item.StartTime <= cursorTime + 1e-9 && item.StartTime + item.Duration > cursorTime + 1e-9)
+                || item.StartTime >= cursorTime - 1e-9);
     }
 
     // ── Paste ─────────────────────────────────────────────────────────────
