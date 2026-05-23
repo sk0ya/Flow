@@ -92,7 +92,7 @@ public sealed class VimContext(VimEngine engine, MainViewModel viewModel, GanttC
 
     public void SyncSelection()
     {
-        ViewModel.SetSelectionFromVim(TaskAtCursor());
+        ViewModel.SetSelectionFromVim(null);
         GanttView.ScrollCursorIntoView();
     }
 
@@ -230,6 +230,8 @@ internal static class VimKeyNotation
         Key.Add                   => "+",
         Key.OemMinus  when !shift => "-",
         Key.Subtract              => "-",
+        Key.OemPeriod when !shift => ".",
+        Key.Decimal              => ".",
         Key.OemPeriod when  shift => ">",
         Key.OemComma  when  shift => "<",
         _ => null,
@@ -259,6 +261,8 @@ public sealed class VimEngine
     }
 
     public VimMode Mode { get; private set; } = VimMode.Normal;
+    public int CurrentCommandCount { get; private set; } = 1;
+    public int CurrentCommandIteration { get; private set; }
 
     public event Action<VimMode>? ModeChanged;
 
@@ -327,8 +331,20 @@ public sealed class VimEngine
         {
             if (!registry.TryGetCommand(candidate, out var command)) continue;
             ClearPendingInput();
-            for (int index = 0; index < count; index++)
-                command(context);
+            CurrentCommandCount = count;
+            try
+            {
+                for (int index = 0; index < count; index++)
+                {
+                    CurrentCommandIteration = index + 1;
+                    command(context);
+                }
+            }
+            finally
+            {
+                CurrentCommandCount = 1;
+                CurrentCommandIteration = 0;
+            }
             return true;
         }
 

@@ -1,9 +1,11 @@
 using System;
 using System.IO;
+using System.Reflection;
 using System.Threading;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Threading;
+using Flow.Services;
 using Flow.ViewModels;
 using Flow.Views.Controls;
 
@@ -36,13 +38,18 @@ internal static class TestEnvironment
 
     public static MainViewModel CreateMainViewModel()
     {
-        var viewModel = new MainViewModel
+        string draftDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "FlowTests",
+            Guid.NewGuid().ToString("N"));
+        var viewModel = new MainViewModel(draftService: new ProjectDraftService(draftDirectory))
         {
             TimeUnit = "秒",
             CellDuration = 1,
             TotalDuration = 30,
         };
 
+        DisableBackgroundTimers(viewModel);
         return viewModel;
     }
 
@@ -121,6 +128,24 @@ internal static class TestEnvironment
             Source = source,
             Mode = mode,
         });
+    }
+
+    private static void DisableBackgroundTimers(MainViewModel viewModel)
+    {
+        typeof(MainViewModel)
+            .GetField("_suspendAutoSave", BindingFlags.Instance | BindingFlags.NonPublic)?
+            .SetValue(viewModel, true);
+
+        StopTimer(viewModel, "_autoSaveTimer");
+        StopTimer(viewModel, "_cellDurationTimer");
+    }
+
+    private static void StopTimer(MainViewModel viewModel, string fieldName)
+    {
+        var timer = typeof(MainViewModel)
+            .GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)?
+            .GetValue(viewModel) as DispatcherTimer;
+        timer?.Stop();
     }
 
     private sealed class AppStateBackup

@@ -61,7 +61,7 @@ internal static class VimCommands
             .FirstOrDefault();
         if (first == null) return;
         ctx.ViewModel.CursorTime = first.StartTime;
-        ctx.ViewModel.SetSelectionFromVim(first);
+        ctx.SyncSelection();
     }
 
     internal static void WordForward(VimContext ctx)
@@ -77,7 +77,7 @@ internal static class VimCommands
             if (next == null) continue;
             vm.CursorLaneIndex = li;
             vm.CursorTime = next.StartTime;
-            vm.SetSelectionFromVim(next);
+            ctx.SyncSelection();
             return;
         }
     }
@@ -89,7 +89,7 @@ internal static class VimCommands
         if (cur != null && vm.CursorTime > cur.StartTime + 1e-9)
         {
             vm.CursorTime = cur.StartTime;
-            vm.SetSelectionFromVim(cur);
+            ctx.SyncSelection();
             return;
         }
         for (int li = vm.CursorLaneIndex; li >= 0; li--)
@@ -102,7 +102,7 @@ internal static class VimCommands
             if (prev == null) continue;
             vm.CursorLaneIndex = li;
             vm.CursorTime = prev.StartTime;
-            vm.SetSelectionFromVim(prev);
+            ctx.SyncSelection();
             return;
         }
     }
@@ -118,7 +118,7 @@ internal static class VimCommands
         if (task == null) return;
         double last = Math.Max(task.StartTime, task.StartTime + task.Duration - ctx.GridStep);
         vm.CursorTime = last;
-        vm.SetSelectionFromVim(task);
+        ctx.SyncSelection();
     }
 
     internal static void GoLineStart(VimContext ctx)
@@ -137,106 +137,131 @@ internal static class VimCommands
         if (last == null) return;
         double pos = Math.Max(last.StartTime, last.StartTime + last.Duration - ctx.GridStep);
         vm.CursorTime = pos;
-        vm.SetSelectionFromVim(last);
+        ctx.SyncSelection();
     }
 
     // ── Duration / Move ───────────────────────────────────────────────────
 
-    internal static void DurationGrow(VimContext ctx)
+    internal static bool DurationGrow(VimContext ctx)
     {
         var task = ctx.TaskAtCursor();
-        if (task == null) return;
-        ApplyTimelineChanges(ctx, ctx.GanttView.ResizeTaskByKeyboard(task, ctx.GridStep));
+        if (task == null) return false;
+        return ApplyTimelineChanges(ctx, ctx.GanttView.ResizeTaskByKeyboard(task, ctx.GridStep));
     }
 
-    internal static void DurationShrink(VimContext ctx)
+    internal static bool DurationShrink(VimContext ctx)
     {
         var task = ctx.TaskAtCursor();
-        if (task == null) return;
-        ApplyTimelineChanges(ctx, ctx.GanttView.ResizeTaskByKeyboard(task, -ctx.GridStep));
+        if (task == null) return false;
+        return ApplyTimelineChanges(ctx, ctx.GanttView.ResizeTaskByKeyboard(task, -ctx.GridStep));
     }
 
-    internal static void MoveTaskRight(VimContext ctx)
+    internal static bool MoveTaskRight(VimContext ctx)
     {
         var task = ctx.TaskAtCursor();
-        if (task == null) return;
-        ApplyTimelineChanges(ctx, ctx.GanttView.MoveTaskByKeyboard(task, ctx.GridStep));
+        if (task == null) return false;
+        if (!ApplyTimelineChanges(ctx, ctx.GanttView.MoveTaskByKeyboard(task, ctx.GridStep)))
+            return false;
         ctx.ViewModel.CursorTime = task.StartTime;
-        ctx.ViewModel.SetSelectionFromVim(task);
-        ctx.GanttView.ScrollCursorIntoView();
+        ctx.SyncSelection();
+        return true;
     }
 
-    internal static void MoveTaskLeft(VimContext ctx)
+    internal static bool MoveTaskLeft(VimContext ctx)
     {
         var task = ctx.TaskAtCursor();
-        if (task == null) return;
-        ApplyTimelineChanges(ctx, ctx.GanttView.MoveTaskByKeyboard(task, -ctx.GridStep));
+        if (task == null) return false;
+        if (!ApplyTimelineChanges(ctx, ctx.GanttView.MoveTaskByKeyboard(task, -ctx.GridStep)))
+            return false;
         ctx.ViewModel.CursorTime = task.StartTime;
-        ctx.ViewModel.SetSelectionFromVim(task);
-        ctx.GanttView.ScrollCursorIntoView();
+        ctx.SyncSelection();
+        return true;
     }
 
     // ── Edit ─────────────────────────────────────────────────────────────
 
-    internal static void Rename(VimContext ctx)
+    internal static bool Rename(VimContext ctx)
     {
         var task = ctx.TaskAtCursor();
         if (task != null)
         {
-            ctx.GanttView.StartRenameSelectedItem();
-            return;
+            ctx.GanttView.StartRenameItem(task);
+            ctx.ViewModel.SetSelectionFromVim(null);
+            return true;
         }
         var laneId = ctx.CursorLaneId();
-        if (laneId == Guid.Empty) return;
-        var newItem = ctx.ViewModel.AddNewItemAt(laneId, ctx.ViewModel.CursorTime);
-        if (newItem != null) ctx.GanttView.StartRenameSelectedItem(discardOnCancel: true);
+        if (laneId == Guid.Empty) return false;
+        var newItem = ctx.ViewModel.AddNewItemAt(
+            laneId,
+            ctx.ViewModel.CursorTime,
+            activateTaskEditor: false,
+            selectItem: false);
+        if (newItem == null) return false;
+        ctx.GanttView.StartRenameItem(newItem, discardOnCancel: true);
+        ctx.ViewModel.SetSelectionFromVim(null);
+        return true;
     }
 
     // ── Delete / Yank ─────────────────────────────────────────────────────
 
-    internal static void DeleteTask(VimContext ctx)
+    internal static bool DeleteTask(VimContext ctx)
     {
         var task = ctx.TaskAtCursor();
-        if (task == null) return;
-        DeleteTasks(ctx, [task]);
+        return task != null && DeleteTasks(ctx, [task]);
     }
 
-    internal static void DeleteLane(VimContext ctx)
+    internal static bool DeleteTaskAtOrAfterCursor(VimContext ctx)
+    {
+        Guid laneId = ctx.CursorLaneId();
+        if (laneId == Guid.Empty)
+            return false;
+
+        double cursorTime = ctx.ViewModel.CursorTime;
+        var task = ctx.ViewModel.Items
+            .Where(item => item.LaneId == laneId)
+            .OrderBy(item => item.StartTime)
+            .FirstOrDefault(item =>
+                (item.StartTime <= cursorTime + 1e-9 && item.StartTime + item.Duration > cursorTime + 1e-9)
+                || item.StartTime >= cursorTime - 1e-9);
+
+        return task != null && DeleteTasks(ctx, [task]);
+    }
+
+    internal static bool DeleteLane(VimContext ctx)
     {
         var vm   = ctx.ViewModel;
         var lane = vm.Lanes.ElementAtOrDefault(vm.CursorLaneIndex);
-        if (lane == null) return;
-        DeleteLanes(ctx, [lane]);
+        return lane != null && DeleteLanes(ctx, [lane]);
     }
 
-    internal static void DeleteVisualSelection(VimContext ctx)
+    internal static bool DeleteVisualSelection(VimContext ctx)
     {
         var tasks = ctx.VisualSelectionTasks().ToList();
         if (tasks.Count == 0)
         {
             var current = ctx.TaskAtCursor();
             if (current == null)
-                return;
+                return false;
 
             tasks.Add(current);
         }
 
-        DeleteTasks(ctx, tasks);
+        return DeleteTasks(ctx, tasks);
     }
 
-    internal static void DeleteVisualLineSelection(VimContext ctx)
+    internal static bool DeleteVisualLineSelection(VimContext ctx)
     {
         var lanes = ctx.VisualLineSelectionLanes().ToList();
         if (lanes.Count == 0)
         {
             var lane = ctx.ViewModel.Lanes.ElementAtOrDefault(ctx.ViewModel.CursorLaneIndex);
             if (lane == null)
-                return;
+                return false;
 
             lanes.Add(lane);
         }
 
-        DeleteLanes(ctx, lanes);
+        return DeleteLanes(ctx, lanes);
     }
 
     internal static void YankTask(VimContext ctx)
@@ -288,10 +313,10 @@ internal static class VimCommands
 
     // ── Paste ─────────────────────────────────────────────────────────────
 
-    internal static void PasteAfter(VimContext ctx)  => Paste(ctx, before: false);
-    internal static void PasteBefore(VimContext ctx) => Paste(ctx, before: true);
+    internal static bool PasteAfter(VimContext ctx)  => Paste(ctx, before: false);
+    internal static bool PasteBefore(VimContext ctx) => Paste(ctx, before: true);
 
-    private static void Paste(VimContext ctx, bool before)
+    private static bool Paste(VimContext ctx, bool before)
     {
         var vm = ctx.ViewModel;
         var cb = ctx.Clipboard;
@@ -299,25 +324,79 @@ internal static class VimCommands
         if (cb.Kind == VimClipboard.ClipKind.Task && cb.Task != null)
         {
             var laneId = ctx.CursorLaneId();
-            if (laneId == Guid.Empty) return;
+            if (laneId == Guid.Empty) return false;
             double start = before ? Math.Max(0, vm.CursorTime - cb.Task.Duration) : vm.CursorTime;
             var item = vm.PasteItem(cb.Task, laneId, start);
             vm.UndoRedo.Push(new AddItemCommand(vm.Items, item));
+            vm.SetSelectionFromVim(null);
+            return true;
         }
-        else if (cb.Kind == VimClipboard.ClipKind.TaskBlock && cb.TaskBlock != null)
+        if (cb.Kind == VimClipboard.ClipKind.TaskBlock && cb.TaskBlock != null)
         {
-            PasteTaskBlock(ctx, cb.TaskBlock, before);
+            return PasteTaskBlock(ctx, cb.TaskBlock, before);
         }
-        else if (cb.Kind == VimClipboard.ClipKind.LaneBlock && cb.LaneBlock != null)
+        if (cb.Kind == VimClipboard.ClipKind.LaneBlock && cb.LaneBlock != null)
         {
-            PasteLaneBlock(ctx, cb.LaneBlock, before);
+            return PasteLaneBlock(ctx, cb.LaneBlock, before);
         }
+
+        return false;
     }
 
-    private static void DeleteTasks(VimContext ctx, IReadOnlyList<ItemViewModel> tasks)
+    internal static bool DeleteTaskRangeAtCursor(VimContext ctx, int laneSpan, double timeSpan)
+    {
+        if (laneSpan <= 0 || timeSpan <= 0 || ctx.ViewModel.Lanes.Count == 0)
+            return false;
+
+        int startLaneIndex = Math.Clamp(ctx.ViewModel.CursorLaneIndex, 0, ctx.ViewModel.Lanes.Count - 1);
+        int endLaneIndex = Math.Min(ctx.ViewModel.Lanes.Count - 1, startLaneIndex + laneSpan - 1);
+        var laneIds = Enumerable.Range(startLaneIndex, endLaneIndex - startLaneIndex + 1)
+            .Select(index => ctx.ViewModel.Lanes[index].Id)
+            .ToHashSet();
+        double startTime = ctx.ViewModel.CursorTime;
+        double endTime = startTime + timeSpan;
+
+        var tasks = ctx.ViewModel.Items
+            .Where(task => laneIds.Contains(task.LaneId)
+                        && task.StartTime < endTime - 1e-9
+                        && task.StartTime + task.Duration > startTime + 1e-9)
+            .OrderBy(task => ctx.LaneIndex(task.LaneId))
+            .ThenBy(task => task.StartTime)
+            .ToList();
+
+        return DeleteTasks(ctx, tasks);
+    }
+
+    internal static bool DeleteLaneRangeAtCursor(VimContext ctx, int laneCount)
+    {
+        if (laneCount <= 0 || ctx.ViewModel.Lanes.Count == 0)
+            return false;
+
+        int startLaneIndex = Math.Clamp(ctx.ViewModel.CursorLaneIndex, 0, ctx.ViewModel.Lanes.Count - 1);
+        var lanes = ctx.ViewModel.Lanes
+            .Skip(startLaneIndex)
+            .Take(laneCount)
+            .ToList();
+
+        return DeleteLanes(ctx, lanes);
+    }
+
+    internal static bool RenameCurrentTaskTo(VimContext ctx, string newName)
+    {
+        var task = ctx.TaskAtCursor();
+        if (task == null || string.IsNullOrWhiteSpace(newName) || task.Name == newName)
+            return false;
+
+        string oldName = task.Name;
+        task.Name = newName;
+        ctx.ViewModel.UndoRedo.Push(new PropertyChangeCommand<string>(value => task.Name = value, oldName, newName));
+        return true;
+    }
+
+    private static bool DeleteTasks(VimContext ctx, IReadOnlyList<ItemViewModel> tasks)
     {
         if (tasks.Count == 0)
-            return;
+            return false;
 
         YankTaskSelection(ctx, tasks);
 
@@ -336,18 +415,20 @@ internal static class VimCommands
         if (commands.Count > 0)
             vm.UndoRedo.Push(new CompositeCommand(commands));
 
-        vm.SetSelectionFromVim(ctx.TaskAtCursor());
+        vm.SetSelectionFromVim(null);
+        return commands.Count > 0;
     }
 
-    private static void DeleteLanes(VimContext ctx, IReadOnlyList<LaneViewModel> lanesToDelete)
+    private static bool DeleteLanes(VimContext ctx, IReadOnlyList<LaneViewModel> lanesToDelete)
     {
         if (lanesToDelete.Count == 0)
-            return;
+            return false;
 
         YankLaneSelection(ctx, lanesToDelete);
 
         var vm = ctx.ViewModel;
         var cmds = new List<IUndoableCommand>();
+        double cursorTime = vm.CursorTime;
         int firstLaneIndex = vm.Lanes.Count == 0
             ? 0
             : lanesToDelete.Select(lane => vm.Lanes.IndexOf(lane)).Where(index => index >= 0).DefaultIfEmpty(0).Min();
@@ -382,8 +463,20 @@ internal static class VimCommands
         if (cmds.Count > 0)
             vm.UndoRedo.Push(new CompositeCommand(cmds));
 
-        vm.CursorLaneIndex = Math.Clamp(firstLaneIndex, 0, Math.Max(0, vm.Lanes.Count - 1));
-        vm.SetSelectionFromVim(ctx.TaskAtCursor());
+        RestoreCursorAfterDeletion(ctx, firstLaneIndex, cursorTime);
+        return cmds.Count > 0;
+    }
+
+    private static void RestoreCursorAfterDeletion(VimContext ctx, int preferredLaneIndex, double preferredTime)
+    {
+        var vm = ctx.ViewModel;
+        if (vm.Lanes.Count == 0)
+            return;
+
+        vm.CursorLaneIndex = Math.Clamp(preferredLaneIndex, 0, vm.Lanes.Count - 1);
+        vm.CursorTime = Math.Max(0, preferredTime);
+        vm.SetSelectionFromVim(null);
+        ctx.GanttView.ScrollCursorIntoView();
     }
 
     private static void YankTaskSelection(VimContext ctx, IReadOnlyList<ItemViewModel> tasks)
@@ -434,10 +527,10 @@ internal static class VimCommands
             items);
     }
 
-    private static void PasteTaskBlock(VimContext ctx, VimTaskBlockClip clip, bool before)
+    private static bool PasteTaskBlock(VimContext ctx, VimTaskBlockClip clip, bool before)
     {
         if (clip.Tasks.Count == 0 || clip.LaneIds.Count == 0)
-            return;
+            return false;
 
         var vm = ctx.ViewModel;
         var commands = new List<IUndoableCommand>();
@@ -468,12 +561,14 @@ internal static class VimCommands
 
         if (commands.Count > 0)
             vm.UndoRedo.Push(new CompositeCommand(commands));
+        vm.SetSelectionFromVim(null);
+        return commands.Count > 0;
     }
 
-    private static void PasteLaneBlock(VimContext ctx, VimLaneBlockClip clip, bool before)
+    private static bool PasteLaneBlock(VimContext ctx, VimLaneBlockClip clip, bool before)
     {
         if (clip.Lanes.Count == 0)
-            return;
+            return false;
 
         var vm = ctx.ViewModel;
         var commands = new List<IUndoableCommand>();
@@ -493,12 +588,14 @@ internal static class VimCommands
 
         if (commands.Count > 0)
             vm.UndoRedo.Push(new CompositeCommand(commands));
+        vm.SetSelectionFromVim(null);
+        return commands.Count > 0;
     }
 
-    private static void ApplyTimelineChanges(VimContext ctx, IReadOnlyList<TimelineEditChange> changes)
+    private static bool ApplyTimelineChanges(VimContext ctx, IReadOnlyList<TimelineEditChange> changes)
     {
         if (changes.Count == 0)
-            return;
+            return false;
 
         var commands = new List<IUndoableCommand>();
         foreach (var change in changes)
@@ -529,8 +626,10 @@ internal static class VimCommands
         }
 
         if (commands.Count == 0)
-            return;
+            return false;
 
         ctx.ViewModel.UndoRedo.Push(new CompositeCommand(commands));
+        ctx.ViewModel.SetSelectionFromVim(null);
+        return true;
     }
 }

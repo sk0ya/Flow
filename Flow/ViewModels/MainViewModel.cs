@@ -472,15 +472,20 @@ public partial class MainViewModel : ObservableObject
         NewItemName = "";
     }
 
-    public ItemViewModel? AddNewItemAt(Guid laneId, double proposedStartTime)
+    public ItemViewModel? AddNewItemAt(
+        Guid laneId,
+        double proposedStartTime,
+        bool activateTaskEditor = true,
+        bool selectItem = true)
     {
         var targetLaneId = Lanes.Any(l => l.Id == laneId)
             ? laneId
             : Lanes.FirstOrDefault()?.Id ?? Guid.Empty;
         if (targetLaneId == Guid.Empty) return null;
 
-        var item = CreateItem("新しいタスク", targetLaneId, proposedStartTime);
-        SetActivePanel(SidebarPanel.TaskEditor);
+        var item = CreateItem("新しいタスク", targetLaneId, proposedStartTime, selectItem);
+        if (activateTaskEditor)
+            SetActivePanel(SidebarPanel.TaskEditor);
         return item;
     }
 
@@ -1139,7 +1144,7 @@ public partial class MainViewModel : ObservableObject
         };
     }
 
-    private ItemViewModel CreateItem(string name, Guid laneId, double proposedStartTime)
+    private ItemViewModel CreateItem(string name, Guid laneId, double proposedStartTime, bool selectItem = true)
     {
         double defaultDuration = GetDefaultItemDuration();
         var vm = new ItemViewModel
@@ -1152,7 +1157,8 @@ public partial class MainViewModel : ObservableObject
 
         Subscribe(vm);
         Items.Add(vm);
-        SelectedItem = vm;
+        if (selectItem)
+            SelectedItem = vm;
         return vm;
     }
 

@@ -17,19 +17,34 @@ public partial class MainWindow : Window
     private bool     _suppressPopup;
     private double   _savedSidebarWidth = 270.0;
     private (LaneViewModel lane, int index)? _pendingLaneCreatedDuringMove;
+    private readonly bool _skipCloseConfirmation;
 
     // ── Vim state ─────────────────────────────────────────────────────────
     private readonly VimController _vim;
 
-    public MainWindow() : this(null)
+    public MainWindow() : this((string?)null)
     {
     }
 
     public MainWindow(string? startupProjectPath)
     {
         InitializeComponent();
+        _skipCloseConfirmation = false;
         var vm = new MainViewModel(startupProjectPath);
         _vim = new VimController(vm, GanttView);
+        InitializeWithViewModel(vm);
+    }
+
+    internal MainWindow(MainViewModel vm)
+    {
+        InitializeComponent();
+        _skipCloseConfirmation = true;
+        _vim = new VimController(vm, GanttView);
+        InitializeWithViewModel(vm);
+    }
+
+    private void InitializeWithViewModel(MainViewModel vm)
+    {
         _vim.SearchRequested += BeginSearch;
         DataContext = vm;
         GanttView.AddLaneFunc          = vm.AddNewLane;
@@ -37,7 +52,7 @@ public partial class MainWindow : Window
             vm.UndoRedo.Push(new AddLaneCommand(vm.Lanes, lane, index));
         GanttView.LaneCreatedDuringMoveFunc = (lane, index) =>
             _pendingLaneCreatedDuringMove = (lane, index);
-        GanttView.AddItemAtFunc        = vm.AddNewItemAt;
+        GanttView.AddItemAtFunc        = (laneId, startTime) => vm.AddNewItemAt(laneId, startTime);
         GanttView.ReorderLanesCallback = (from, to) =>
         {
             vm.ReorderLane(from, to);
@@ -63,10 +78,14 @@ public partial class MainWindow : Window
         {
             if (!_vim.TryCommitPendingNewItem(item))
                 vm.UndoRedo.Push(new AddItemCommand(vm.Items, item));
+            _vim.HandleCommittedNewItem(item);
         };
 
         GanttView.ItemRenamedFunc = (item, oldName, newName) =>
+        {
             vm.UndoRedo.Push(new PropertyChangeCommand<string>(v => item.Name = v, oldName, newName));
+            _vim.HandleItemRenamed(item, oldName, newName);
+        };
 
         vm.PropertyChanged += (_, e) =>
         {
@@ -78,6 +97,9 @@ public partial class MainWindow : Window
         vm.StartRenameRequested += (_, _) => GanttView.StartRenameSelectedItem(discardOnCancel: true);
         Closing += (_, e) =>
         {
+            if (_skipCloseConfirmation)
+                return;
+
             if (!vm.CanCloseWindow())
                 e.Cancel = true;
         };
@@ -380,6 +402,21 @@ public partial class MainWindow : Window
         Key key = e.Key == Key.ImeProcessed ? e.ImeProcessedKey : e.Key;
         if (_vim.HandleKey(key, Keyboard.Modifiers))
             e.Handled = true;
+    }
+
+    internal bool DispatchPreviewKeyForTest(Key key)
+    {
+        var source = PresentationSource.FromVisual(this);
+        if (source == null)
+            throw new InvalidOperationException("Preview key dispatch requires a loaded window.");
+
+        var args = new KeyEventArgs(Keyboard.PrimaryDevice, source, 0, key)
+        {
+            RoutedEvent = Keyboard.PreviewKeyDownEvent,
+        };
+
+        OnPreviewKeyDown(args);
+        return args.Handled;
     }
 
     protected override void OnPreviewTextInput(TextCompositionEventArgs e)

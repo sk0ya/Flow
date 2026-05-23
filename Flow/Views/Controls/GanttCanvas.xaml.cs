@@ -263,6 +263,14 @@ public partial class GanttCanvas : UserControl
         StartTaskRename(item, discardOnCancel);
     }
 
+    public void StartRenameItem(ItemViewModel item, bool discardOnCancel = false)
+    {
+        if (IsRenaming)
+            return;
+
+        StartTaskRename(item, discardOnCancel);
+    }
+
     public IReadOnlyList<TimelineEditChange> MoveTaskByKeyboard(ItemViewModel item, double deltaStart)
     {
         if (deltaStart == 0)
@@ -739,14 +747,13 @@ public partial class GanttCanvas : UserControl
             double rowY = i * LaneH - offset;
             if (rowY + LaneH < 0 || rowY > viewportH) continue;
 
-            bool isActiveLane    = SelectedItem != null && SelectedItem.LaneId == lanes[i].Id;
             bool isReorderSource = _drag == DragMode.LaneReorder && _reorderSourceLane == i;
 
             AddTo(FrozenLaneCanvas, new TextBlock
             {
                 Text = lanes[i].Name,
                 FontSize = 12,
-                FontWeight = isActiveLane ? FontWeights.SemiBold : FontWeights.Normal,
+                FontWeight = FontWeights.Normal,
                 Foreground = palette.TextPrimary,
                 Opacity = isReorderSource ? 0.25 : 1.0,
                 Width = LaneHeaderW - 16,
@@ -785,7 +792,6 @@ public partial class GanttCanvas : UserControl
         if (_drag == DragMode.LaneReorder && _reorderSourceLane >= 0 && _reorderSourceLane < lanes.Count)
         {
             var ghostLane = lanes[_reorderSourceLane];
-            bool isGhostActive = SelectedItem != null && SelectedItem.LaneId == ghostLane.Id;
             double ghostTop = Math.Clamp(_reorderMouseVisualY - LaneH / 2.0, 0, Math.Max(0, viewportH - LaneH));
 
             // shadow
@@ -813,7 +819,7 @@ public partial class GanttCanvas : UserControl
             {
                 Text = ghostLane.Name,
                 FontSize = 12,
-                FontWeight = isGhostActive ? FontWeights.SemiBold : FontWeights.Normal,
+                FontWeight = FontWeights.Normal,
                 Foreground = palette.TextPrimary,
                 Width = LaneHeaderW - 20,
                 TextAlignment = TextAlignment.Right,
@@ -830,8 +836,6 @@ public partial class GanttCanvas : UserControl
     private void DrawBar(ItemViewModel item, bool ghost)
     {
         if (!_barRects.TryGetValue(item.Id, out var r)) return;
-        bool selected = SelectedItem?.Id == item.Id;
-        bool isCritical = CriticalPathItemIds?.Contains(item.Id) == true;
         var palette = ThemeService.CurrentPalette;
 
         var category = item.CategoryId != Guid.Empty
@@ -851,14 +855,8 @@ public partial class GanttCanvas : UserControl
             Background = fill,
             CornerRadius = new CornerRadius(5),
             Opacity = ghost ? 0.22 : 1.0,
-            BorderBrush = selected
-                ? palette.TextPrimary
-                : item.HasErrors
-                    ? palette.Danger
-                    : isCritical ? palette.Warning : Brushes.Transparent,
-            BorderThickness = selected
-                ? new Thickness(2)
-                : new Thickness(item.HasErrors ? 1.5 : isCritical ? 1.5 : 0),
+            BorderBrush = item.HasErrors ? palette.Danger : Brushes.Transparent,
+            BorderThickness = new Thickness(item.HasErrors ? 1.5 : 0),
             Cursor = Cursors.SizeAll,
             ToolTip = BuildTooltip(item),
             ClipToBounds = true,
@@ -872,38 +870,13 @@ public partial class GanttCanvas : UserControl
                 FontSize = 11,
                 Foreground = textFill,
                 FontWeight = FontWeights.SemiBold,
-                Margin = new Thickness(7, 0, ResizeW + 4, 0),
+                Margin = new Thickness(7, 0, 7, 0),
                 VerticalAlignment = VerticalAlignment.Center,
                 TextTrimming = TextTrimming.CharacterEllipsis,
             };
         }
 
         Add(bar, r.Left, r.Top);
-
-        if (!ghost && r.Width > ResizeW * 2)
-        {
-            Add(new Border
-            {
-                Width = ResizeW,
-                Height = r.Height,
-                Background = CreateResizeHandleBrush(),
-                CornerRadius = new CornerRadius(0, 5, 5, 0),
-                Cursor = Cursors.SizeWE,
-            }, r.Right - ResizeW, r.Top);
-        }
-
-        if (!ghost && isCritical)
-        {
-            Add(new Rectangle
-            {
-                Width = Math.Max(8, r.Width - 10),
-                Height = 3,
-                Fill = palette.Warning,
-                RadiusX = 1.5,
-                RadiusY = 1.5,
-                Opacity = 0.9,
-            }, r.Left + 5, r.Top + 3);
-        }
     }
 
     private void DrawDragGhost(ItemViewModel item, double ppu)
