@@ -142,6 +142,23 @@ public sealed class VimControllerIntegrationTests
         });
     }
 
+    [Fact]
+    public void HandleKey_WhenSearchCommandInvoked_RaisesSearchRequested()
+    {
+        TestEnvironment.RunInWpfContext(() =>
+        {
+            var viewModel = TestEnvironment.CreateMainViewModel();
+            var controller = new VimController(viewModel, TestEnvironment.CreateCanvas());
+            int requested = 0;
+            controller.SearchRequested += () => requested++;
+
+            bool handled = controller.HandleKey(Key.Oem2, ModifierKeys.None);
+
+            Assert.True(handled);
+            Assert.Equal(1, requested);
+        });
+    }
+
     private static T? GetPrivateField<T>(object target, string fieldName)
         where T : class
     {

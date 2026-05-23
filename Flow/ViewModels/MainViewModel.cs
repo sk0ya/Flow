@@ -185,6 +185,8 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    public void ActivatePanel(SidebarPanel panel) => SetActivePanel(panel);
+
     private void SetActivePanel(SidebarPanel panel)
     {
         _activeSidebarPanel = panel;

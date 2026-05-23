@@ -30,6 +30,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         var vm = new MainViewModel(startupProjectPath);
         _vim = new VimController(vm, GanttView);
+        _vim.SearchRequested += BeginSearch;
         DataContext = vm;
         GanttView.AddLaneFunc          = vm.AddNewLane;
         GanttView.LaneCreatedFunc      = (lane, index) =>
@@ -309,6 +310,19 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 break;
         }
+    }
+
+    private void BeginSearch()
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        vm.ActivatePanel(SidebarPanel.CanvasTools);
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, () =>
+        {
+            CanvasSearchBox.Focus();
+            CanvasSearchBox.SelectAll();
+        });
     }
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)

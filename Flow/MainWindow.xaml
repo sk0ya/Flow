@@ -870,7 +870,7 @@
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBox Style="{StaticResource InputBox}" FontSize="11"
+                                        <TextBox x:Name="CanvasSearchBox" Style="{StaticResource InputBox}" FontSize="11"
                                                  Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"/>
                                         <Button Grid.Column="1" Content="◀" Style="{StaticResource FlatBtn}" Padding="8,4" Margin="4,0,0,0"
                                                 Command="{Binding SelectPreviousMatchCommand}"/>

@@ -78,6 +78,7 @@ internal static class TestEnvironment
         Bind(canvas, GanttCanvas.IsVisualModeProperty, viewModel, nameof(MainViewModel.IsVisualMode));
         Bind(canvas, GanttCanvas.IsVisualLineModeProperty, viewModel, nameof(MainViewModel.IsVisualLineMode));
         Bind(canvas, GanttCanvas.VisualAnchorLaneProperty, viewModel, nameof(MainViewModel.VisualAnchorLane));
+        Bind(canvas, GanttCanvas.VisualAnchorTimeProperty, viewModel, nameof(MainViewModel.VisualAnchorTime));
 
         FlushDispatcher();
         return canvas;

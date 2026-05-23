@@ -100,6 +100,40 @@ public sealed class VimEngineTests
     }
 
     [Fact]
+    public void HandleKey_WhenCountPrefixProvided_RepeatsCommand()
+    {
+        var engine = new VimEngine();
+        int executions = 0;
+
+        engine.Register("j", _ => executions++);
+
+        bool firstHandled = engine.HandleKey(Key.D3, shift: false, context: null!);
+        bool secondHandled = engine.HandleKey(Key.J, shift: false, context: null!);
+
+        Assert.True(firstHandled);
+        Assert.True(secondHandled);
+        Assert.Equal(3, executions);
+    }
+
+    [Fact]
+    public void HandleKey_WhenCountPrefixPrecedesSequence_RepeatsSequenceCommand()
+    {
+        var engine = new VimEngine();
+        int executions = 0;
+
+        engine.Register("dd", _ => executions++);
+
+        bool countHandled = engine.HandleKey(Key.D2, shift: false, context: null!);
+        bool prefixHandled = engine.HandleKey(Key.D, shift: false, context: null!);
+        bool commandHandled = engine.HandleKey(Key.D, shift: false, context: null!);
+
+        Assert.True(countHandled);
+        Assert.True(prefixHandled);
+        Assert.True(commandHandled);
+        Assert.Equal(2, executions);
+    }
+
+    [Fact]
     public void TryExitToNormalMode_WhenBufferExists_ClearsPendingSequence()
     {
         var engine = new VimEngine();
@@ -117,6 +151,23 @@ public sealed class VimEngineTests
         Assert.True(firstHandledAfterClear);
         Assert.True(secondHandledAfterClear);
         Assert.Equal(["gg"], executed);
+    }
+
+    [Fact]
+    public void TryCancelPendingInput_WhenCountExists_ClearsPendingCount()
+    {
+        var engine = new VimEngine();
+        int executions = 0;
+
+        engine.Register("j", _ => executions++);
+
+        engine.HandleKey(Key.D3, shift: false, context: null!);
+        bool canceled = engine.TryCancelPendingInput();
+        bool handled = engine.HandleKey(Key.J, shift: false, context: null!);
+
+        Assert.True(canceled);
+        Assert.True(handled);
+        Assert.Equal(1, executions);
     }
 
     [Fact]

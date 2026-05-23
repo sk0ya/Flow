@@ -193,6 +193,8 @@ internal static class VimKeyNotation
         Key.W when !shift => "w",
         Key.B when !shift => "b",
         Key.E when !shift => "e",
+        Key.Oem2 when !shift => "/",
+        Key.Divide => "/",
         Key.G when !shift => "g",
         Key.G when  shift => "G",
         Key.N when !shift => "n",
@@ -203,6 +205,25 @@ internal static class VimKeyNotation
         Key.X when !shift => "x",
         Key.Z when !shift => "z",
         Key.D0 when !shift => "0",
+        Key.NumPad0 => "0",
+        Key.D1 when !shift => "1",
+        Key.NumPad1 => "1",
+        Key.D2 when !shift => "2",
+        Key.NumPad2 => "2",
+        Key.D3 when !shift => "3",
+        Key.NumPad3 => "3",
+        Key.D4 when !shift => "4",
+        Key.NumPad4 => "4",
+        Key.D5 when !shift => "5",
+        Key.NumPad5 => "5",
+        Key.D6 when !shift => "6",
+        Key.NumPad6 => "6",
+        Key.D7 when !shift => "7",
+        Key.NumPad7 => "7",
+        Key.D8 when !shift => "8",
+        Key.NumPad8 => "8",
+        Key.D9 when !shift => "9",
+        Key.NumPad9 => "9",
         Key.D4 when  shift => "$",
         Key.D6 when  shift => "^",
         Key.OemPlus   when  shift => "+",
@@ -226,6 +247,7 @@ public sealed class VimEngine
 
     private readonly DispatcherTimer _clearTimer;
     private string _buffer = "";
+    private string _countBuffer = "";
 
     public VimEngine(TimeSpan? bufferTimeout = null)
     {
@@ -266,7 +288,7 @@ public sealed class VimEngine
 
     public bool TryCancelPendingInput()
     {
-        if (string.IsNullOrEmpty(_buffer))
+        if (string.IsNullOrEmpty(_buffer) && string.IsNullOrEmpty(_countBuffer))
             return false;
 
         ClearPendingInput();
@@ -289,18 +311,24 @@ public sealed class VimEngine
     public void ClearPendingInput()
     {
         _buffer = "";
+        _countBuffer = "";
         _clearTimer.Stop();
     }
 
     private bool TryDispatch(string token, VimContext context)
     {
+        if (TryAccumulateCount(token))
+            return true;
+
         string candidate = _buffer + token;
+        int count = ParsePendingCount();
 
         foreach (var registry in EnumerateActiveRegistries())
         {
             if (!registry.TryGetCommand(candidate, out var command)) continue;
             ClearPendingInput();
-            command(context);
+            for (int index = 0; index < count; index++)
+                command(context);
             return true;
         }
 
@@ -324,6 +352,23 @@ public sealed class VimEngine
 
         return false;
     }
+
+    private bool TryAccumulateCount(string token)
+    {
+        if (_buffer.Length != 0 || token.Length != 1 || token[0] < '0' || token[0] > '9')
+            return false;
+
+        if (token == "0" && _countBuffer.Length == 0)
+            return false;
+
+        _countBuffer += token;
+        _clearTimer.Stop();
+        _clearTimer.Start();
+        return true;
+    }
+
+    private int ParsePendingCount()
+        => int.TryParse(_countBuffer, out int count) && count > 0 ? count : 1;
 
     private IEnumerable<VimCommandRegistry> EnumerateActiveRegistries()
     {

@@ -13,6 +13,8 @@ public sealed class VimController
     private readonly VimClipboard _clipboard = new();
     private LaneViewModel? _pendingNewLane;
 
+    public event Action? SearchRequested;
+
     public VimController(MainViewModel viewModel, GanttCanvas ganttView)
     {
         _viewModel = viewModel;
@@ -94,6 +96,7 @@ public sealed class VimController
         _engine.Register("e", VimCommands.WordEnd);
         _engine.Register("0", VimCommands.GoLineStart);
         _engine.Register("$", VimCommands.GoLineEnd);
+        _engine.Register("/", _ => SearchRequested?.Invoke());
         _engine.Register("n", ctx => ctx.ViewModel.SelectNextMatchCommand.Execute(null));
         _engine.Register("N", ctx => ctx.ViewModel.SelectPreviousMatchCommand.Execute(null));
 
