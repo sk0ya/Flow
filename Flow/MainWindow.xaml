@@ -492,6 +492,7 @@
             <RowDefinition Height="52"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="24"/>
         </Grid.RowDefinitions>
 
         <!-- ════ TOOLBAR ════ -->
@@ -1308,17 +1309,8 @@
                                       VisualAnchorLane="{Binding VisualAnchorLane}"
                                       VisualAnchorTime="{Binding VisualAnchorTime}"
                                       CriticalPathItemIds="{Binding CriticalPathItemIds}"
+                                      SearchText="{Binding SearchHighlightText}"
                                       />
-
-                <!-- Visual mode indicator -->
-                <Border HorizontalAlignment="Left" VerticalAlignment="Bottom"
-                        Margin="10,0,0,10" Padding="8,3" CornerRadius="4"
-                        Background="{DynamicResource AppToastBackgroundBrush}"
-                        Visibility="{Binding IsVisualMode, Converter={StaticResource BoolVis}}">
-                    <TextBlock Text="{Binding VisualModeLabel}" FontSize="11" FontWeight="Bold"
-                               Foreground="{DynamicResource AppAccentBrush}"
-                               FontFamily="Consolas, Courier New, monospace"/>
-                </Border>
             </Grid>
         </Grid>
 
@@ -1353,8 +1345,100 @@
             </Grid>
         </Border>
 
+        <!-- ════ STATUS BAR ════ -->
+        <Border Grid.Row="3"
+                Background="{DynamicResource AppSurfaceBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}"
+                BorderThickness="0,1,0,0">
+            <Grid Margin="8,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0"
+                        Background="{DynamicResource AppAccentBrush}"
+                        Padding="10,0"
+                        MinWidth="86">
+                    <TextBlock Text="{Binding VimModeLabel}"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource AppAccentTextBrush}"
+                               FontFamily="Consolas, Courier New, monospace"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                </Border>
+
+                <TextBlock Grid.Column="1"
+                           Text="{Binding StatusMessage}"
+                           FontSize="11"
+                           Foreground="{DynamicResource AppTextSecondaryBrush}"
+                           Margin="10,0"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsVimPromptActive}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <TextBlock Grid.Column="1"
+                           Text="{Binding VimPromptText}"
+                           FontSize="12"
+                           Foreground="{DynamicResource AppTextPrimaryBrush}"
+                           Margin="10,0"
+                           VerticalAlignment="Center"
+                           FontFamily="Consolas, Courier New, monospace"
+                           TextTrimming="CharacterEllipsis">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsVimPromptActive}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <TextBlock Grid.Column="2"
+                           Text="{Binding FilterSummary}"
+                           FontSize="11"
+                           Foreground="{DynamicResource AppTextMutedBrush}"
+                           Margin="10,0"
+                           VerticalAlignment="Center"/>
+
+                <StackPanel Grid.Column="3"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="レーン "
+                               FontSize="11"
+                               Foreground="{DynamicResource AppTextMutedBrush}"/>
+                    <TextBlock Text="{Binding CursorLaneNumber}"
+                               FontSize="11"
+                               Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                    <TextBlock Text="  時刻 "
+                               FontSize="11"
+                               Foreground="{DynamicResource AppTextMutedBrush}"
+                               Margin="8,0,0,0"/>
+                    <TextBlock Text="{Binding CursorTime, Converter={StaticResource HmsConv}}"
+                               FontSize="11"
+                               Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
         <!-- Suggestions popup -->
-        <Popup x:Name="SuggestionsPopup" Grid.RowSpan="3"
+        <Popup x:Name="SuggestionsPopup" Grid.RowSpan="4"
                Placement="Bottom" AllowsTransparency="True" StaysOpen="False">
             <Border Background="{DynamicResource AppSurfaceBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1"
                     CornerRadius="8" MinWidth="200" MaxWidth="300">

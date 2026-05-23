@@ -57,6 +57,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private int    _visualAnchorLane  = -1;
     [ObservableProperty] private double _visualAnchorTime  = double.NaN;
     [ObservableProperty] private string _visualModeLabel   = "";
+    [ObservableProperty] private string _vimModeLabel      = "NORMAL";
+    [ObservableProperty] private bool   _isVimPromptActive = false;
+    [ObservableProperty] private string _vimPromptText     = "";
 
     [ObservableProperty] private string         _projectName = "新しいプロジェクト";
     [ObservableProperty] private string?        _currentFilePath;
@@ -72,6 +75,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private AccentColorOption? _selectedAccentColorOption;
     [ObservableProperty] private bool           _isDirty;
     [ObservableProperty] private string         _searchText = "";
+    [ObservableProperty] private string         _searchHighlightText = "";
     [ObservableProperty] private CategoryViewModel? _selectedFilterCategory = CategoryViewModel.None;
     [ObservableProperty] private bool           _showErrorsOnly;
     [ObservableProperty] private double         _zoomPercent = 100;
@@ -111,14 +115,14 @@ public partial class MainViewModel : ObservableObject
     public static readonly string[] TimeUnitOptions = { "秒", "分", "時間", "日", "週", "スプリント" };
 
     public bool HasRecentProjects => RecentProjects.Count > 0;
-    public bool HasActiveFilters => !string.IsNullOrWhiteSpace(SearchText)
-                                 || ShowErrorsOnly
+    public bool HasActiveFilters => ShowErrorsOnly
                                  || SelectedFilterCategory is { IsNone: false };
     public double ZoomScale => Math.Clamp(ZoomPercent / 100.0, 0.3, 4.0);
     public double PixelsPerUnit => 80 * ZoomScale;
     public bool CanZoomIn => ZoomPercent < 300;
     public bool CanZoomOut => ZoomPercent > 40;
     public bool HasStatusMessage => !string.IsNullOrWhiteSpace(StatusMessage);
+    public int CursorLaneNumber => CursorLaneIndex + 1;
     public string SaveStateLabel => CurrentFilePath == null
         ? (IsDirty ? "未保存のドラフトあり" : "未保存")
         : (IsDirty ? "変更あり" : "保存済み");
@@ -580,7 +584,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ClearFilters()
     {
-        SearchText = "";
+        SearchHighlightText = "";
         SelectedFilterCategory = CategoryViewModel.None;
         ShowErrorsOnly = false;
     }
@@ -728,6 +732,9 @@ public partial class MainViewModel : ObservableObject
 
         return TrySaveProject(CurrentFilePath);
     }
+
+    public bool TrySaveProjectFromVim()
+        => SaveProjectInteractive();
 
     private bool SaveProjectAsInteractive()
     {
@@ -1403,6 +1410,11 @@ public partial class MainViewModel : ObservableObject
 
     // ── Partial property change handlers ─────────────────────────────────
 
+    partial void OnCursorLaneIndexChanged(int value)
+    {
+        OnPropertyChanged(nameof(CursorLaneNumber));
+    }
+
     partial void OnTimeUnitChanged(string value)
     {
         CellDuration = NormalizeCellDuration(CellDuration);
@@ -1481,7 +1493,7 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnSearchTextChanged(string value)
     {
-        RefreshFilteredView();
+        SearchHighlightText = value;
         UpdateStatusMessage();
     }
 
@@ -1698,8 +1710,13 @@ public partial class MainViewModel : ObservableObject
         if (SelectedFilterCategory is { IsNone: false } filterCategory && item.CategoryId != filterCategory.Id)
             return false;
 
+        return true;
+    }
+
+    private bool MatchesSearch(ItemViewModel item)
+    {
         if (string.IsNullOrWhiteSpace(SearchText))
-            return true;
+            return false;
 
         string search = SearchText.Trim();
         var laneName = Lanes.FirstOrDefault(lane => lane.Id == item.LaneId)?.Name ?? "";
@@ -1716,7 +1733,7 @@ public partial class MainViewModel : ObservableObject
     private void SelectSearchMatch(bool forward)
     {
         var pool = FilteredItems
-            .Where(item => string.IsNullOrWhiteSpace(SearchText) || MatchesFilters(item))
+            .Where(MatchesSearch)
             .ToList();
 
         if (pool.Count == 0)

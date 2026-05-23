@@ -16,8 +16,11 @@ public sealed class VimController
     private LaneViewModel? _pendingNewLane;
     private Func<VimContext, bool>? _lastRepeatableChange;
     private Func<ItemViewModel, Func<VimContext, bool>>? _pendingCommittedItemRepeatFactory;
+    private VimPromptKind _promptKind = VimPromptKind.None;
+    private string _promptBuffer = "";
+    private string _promptOriginalSearchText = "";
 
-    public event Action? SearchRequested;
+    public event Action? QuitRequested;
 
     public VimController(MainViewModel viewModel, GanttCanvas ganttView)
     {
@@ -31,6 +34,12 @@ public sealed class VimController
 
     public bool HandleKey(Key key, ModifierKeys modifiers)
     {
+        if (HandlePromptKey(key))
+            return true;
+
+        if (_promptKind != VimPromptKind.None)
+            return false;
+
         if ((modifiers & ModifierKeys.Control) != 0)
         {
             if (key == Key.R)
@@ -53,7 +62,54 @@ public sealed class VimController
         => _engine.TryExitToNormalMode();
 
     public bool TryCancelPendingInput()
-        => _engine.TryCancelPendingInput();
+    {
+        if (_promptKind != VimPromptKind.None)
+        {
+            ExitPrompt();
+            return true;
+        }
+
+        return _engine.TryCancelPendingInput();
+    }
+
+    public bool TryClearSearchHighlight()
+    {
+        if (string.IsNullOrWhiteSpace(_viewModel.SearchHighlightText))
+            return false;
+
+        _viewModel.SearchHighlightText = "";
+        return true;
+    }
+
+    public bool HandleTextInput(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return false;
+
+        if (_promptKind == VimPromptKind.None)
+        {
+            if (text == "/")
+            {
+                EnterPrompt(VimPromptKind.Search);
+                return true;
+            }
+
+            if (text == ":")
+            {
+                EnterPrompt(VimPromptKind.Command);
+                return true;
+            }
+
+            return false;
+        }
+
+        if (text is "\r" or "\n")
+            return false;
+
+        _promptBuffer += text;
+        UpdatePromptText();
+        return true;
+    }
 
     public void HandleDiscardedNewItem(ItemViewModel item)
     {
@@ -118,7 +174,6 @@ public sealed class VimController
         _engine.Register("e", VimCommands.WordEnd);
         _engine.Register("0", VimCommands.GoLineStart);
         _engine.Register("$", VimCommands.GoLineEnd);
-        _engine.Register("/", _ => SearchRequested?.Invoke());
         _engine.Register("n", ctx => ctx.ViewModel.SelectNextMatchCommand.Execute(null));
         _engine.Register("N", ctx => ctx.ViewModel.SelectPreviousMatchCommand.Execute(null));
         _engine.Register(".", RepeatLastChange);
@@ -184,11 +239,129 @@ public sealed class VimController
             VimMode.VisualLine => "-- VISUAL LINE --",
             _ => "",
         };
+        _viewModel.VimModeLabel = mode switch
+        {
+            VimMode.Visual => "VISUAL",
+            VimMode.VisualLine => "VISUAL LINE",
+            _ => "NORMAL",
+        };
 
         if (mode == VimMode.Normal)
         {
             _viewModel.VisualAnchorLane = -1;
             _viewModel.VisualAnchorTime = double.NaN;
+        }
+    }
+
+    private bool HandlePromptKey(Key key)
+    {
+        if (_promptKind == VimPromptKind.None)
+            return false;
+
+        switch (key)
+        {
+            case Key.Escape:
+                ExitPrompt();
+                return true;
+            case Key.Return:
+                CommitPrompt();
+                return true;
+            case Key.Back:
+                if (_promptBuffer.Length > 0)
+                {
+                    _promptBuffer = _promptBuffer[..^1];
+                    UpdatePromptText();
+                }
+
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void EnterPrompt(VimPromptKind kind)
+    {
+        _engine.TryExitToNormalMode();
+        _engine.ClearPendingInput();
+        _promptKind = kind;
+        _promptBuffer = "";
+        _promptOriginalSearchText = kind == VimPromptKind.Search ? _viewModel.SearchText : "";
+        _viewModel.IsVimPromptActive = true;
+        _viewModel.VimModeLabel = kind == VimPromptKind.Search ? "SEARCH" : "COMMAND";
+        UpdatePromptText();
+    }
+
+    private void ExitPrompt()
+        => ExitPrompt(restoreSearchPreview: true);
+
+    private void ExitPrompt(bool restoreSearchPreview)
+    {
+        if (restoreSearchPreview && _promptKind == VimPromptKind.Search)
+            _viewModel.SearchText = _promptOriginalSearchText;
+
+        _promptKind = VimPromptKind.None;
+        _promptBuffer = "";
+        _promptOriginalSearchText = "";
+        _viewModel.IsVimPromptActive = false;
+        _viewModel.VimPromptText = "";
+        ApplyMode(_engine.Mode);
+    }
+
+    private void CommitPrompt()
+    {
+        string input = _promptBuffer;
+        var kind = _promptKind;
+        ExitPrompt(restoreSearchPreview: false);
+
+        if (kind == VimPromptKind.Search)
+        {
+            _viewModel.SearchText = input;
+            _viewModel.SearchHighlightText = input;
+            if (!string.IsNullOrWhiteSpace(input))
+                _viewModel.SelectNextMatchCommand.Execute(null);
+
+            return;
+        }
+
+        ExecuteCommandLine(input);
+    }
+
+    private void UpdatePromptText()
+    {
+        string prefix = _promptKind == VimPromptKind.Search ? "/" : ":";
+        _viewModel.VimPromptText = prefix + _promptBuffer;
+        if (_promptKind == VimPromptKind.Search)
+            _viewModel.SearchText = _promptBuffer;
+    }
+
+    private void ExecuteCommandLine(string input)
+    {
+        string command = input.Trim();
+        if (string.IsNullOrEmpty(command))
+            return;
+
+        switch (command)
+        {
+            case "w":
+            case "write":
+                _viewModel.TrySaveProjectFromVim();
+                break;
+            case "q":
+            case "quit":
+                QuitRequested?.Invoke();
+                break;
+            case "wq":
+            case "x":
+                if (_viewModel.TrySaveProjectFromVim())
+                    QuitRequested?.Invoke();
+                break;
+            case "noh":
+            case "nohlsearch":
+                _viewModel.SearchHighlightText = "";
+                break;
+            default:
+                _viewModel.StatusMessage = $"未対応のコマンド: {command}";
+                break;
         }
     }
 
@@ -458,5 +631,12 @@ public sealed class VimController
         AtCursor,
         LaneBelow,
         LaneAbove,
+    }
+
+    private enum VimPromptKind
+    {
+        None,
+        Search,
+        Command,
     }
 }

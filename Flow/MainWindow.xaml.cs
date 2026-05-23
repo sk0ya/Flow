@@ -45,7 +45,7 @@ public partial class MainWindow : Window
 
     private void InitializeWithViewModel(MainViewModel vm)
     {
-        _vim.SearchRequested += BeginSearch;
+        _vim.QuitRequested += Close;
         DataContext = vm;
         GanttView.AddLaneFunc          = vm.AddNewLane;
         GanttView.LaneCreatedFunc      = (lane, index) =>
@@ -304,19 +304,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private void BeginSearch()
-    {
-        if (DataContext is not MainViewModel vm)
-            return;
-
-        vm.ActivatePanel(SidebarPanel.CanvasTools);
-        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, () =>
-        {
-            CanvasSearchBox.Focus();
-            CanvasSearchBox.SelectAll();
-        });
-    }
-
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
         base.OnPreviewKeyDown(e);
@@ -347,6 +334,12 @@ public partial class MainWindow : Window
 
         // Visual mode: Escape exits visual mode (without deselecting)
         if (e.Key == Key.Escape && _vim.TryExitMode())
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape && _vim.TryClearSearchHighlight())
         {
             e.Handled = true;
             return;
@@ -394,7 +387,10 @@ public partial class MainWindow : Window
         base.OnPreviewTextInput(e);
         // IMEがONのとき、テキスト入力外ならIME変換結果を破棄する
         if (!IsTextInputFocused() && !GanttView.IsEditing)
+        {
+            _vim.HandleTextInput(e.Text);
             e.Handled = true;
+        }
     }
 
     // ── SelectItemCommand relay (click in list = select) ─────────────────

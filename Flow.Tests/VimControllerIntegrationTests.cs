@@ -145,19 +145,55 @@ public sealed class VimControllerIntegrationTests
     }
 
     [Fact]
-    public void HandleKey_WhenSearchCommandInvoked_RaisesSearchRequested()
+    public void HandleTextInput_WhenSlashPressed_EntersSearchPrompt()
     {
         TestEnvironment.RunInWpfContext(() =>
         {
             var viewModel = TestEnvironment.CreateMainViewModel();
             var controller = new VimController(viewModel, TestEnvironment.CreateCanvas());
-            int requested = 0;
-            controller.SearchRequested += () => requested++;
 
-            bool handled = controller.HandleKey(Key.Oem2, ModifierKeys.None);
+            bool handled = controller.HandleTextInput("/");
 
             Assert.True(handled);
-            Assert.Equal(1, requested);
+            Assert.True(viewModel.IsVimPromptActive);
+            Assert.Equal("SEARCH", viewModel.VimModeLabel);
+            Assert.Equal("/", viewModel.VimPromptText);
+        });
+    }
+
+    [Fact]
+    public void HandleTextInput_WhenSearchCommitted_UpdatesSearchText()
+    {
+        TestEnvironment.RunInWpfContext(() =>
+        {
+            var viewModel = TestEnvironment.CreateMainViewModel();
+            var controller = new VimController(viewModel, TestEnvironment.CreateCanvas());
+
+            controller.HandleTextInput("/");
+            controller.HandleTextInput("task");
+            bool handled = controller.HandleKey(Key.Return, ModifierKeys.None);
+
+            Assert.True(handled);
+            Assert.False(viewModel.IsVimPromptActive);
+            Assert.Equal("NORMAL", viewModel.VimModeLabel);
+            Assert.Equal("task", viewModel.SearchText);
+        });
+    }
+
+    [Fact]
+    public void HandleTextInput_WhenColonPressed_EntersCommandPrompt()
+    {
+        TestEnvironment.RunInWpfContext(() =>
+        {
+            var viewModel = TestEnvironment.CreateMainViewModel();
+            var controller = new VimController(viewModel, TestEnvironment.CreateCanvas());
+
+            bool handled = controller.HandleTextInput(":");
+
+            Assert.True(handled);
+            Assert.True(viewModel.IsVimPromptActive);
+            Assert.Equal("COMMAND", viewModel.VimModeLabel);
+            Assert.Equal(":", viewModel.VimPromptText);
         });
     }
 

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -85,6 +86,9 @@ public partial class GanttCanvas : UserControl
     public static readonly DependencyProperty CriticalPathItemIdsProperty =
         DependencyProperty.Register(nameof(CriticalPathItemIds), typeof(IEnumerable<Guid>),
             typeof(GanttCanvas), new PropertyMetadata(null, OnAnyChanged));
+    public static readonly DependencyProperty SearchTextProperty =
+        DependencyProperty.Register(nameof(SearchText), typeof(string),
+            typeof(GanttCanvas), new PropertyMetadata("", (d, _) => ((GanttCanvas)d).Render()));
 
     public IEnumerable<ItemViewModel>? ItemsSource
     { get => (IEnumerable<ItemViewModel>?)GetValue(ItemsSourceProperty); set => SetValue(ItemsSourceProperty, value); }
@@ -118,6 +122,8 @@ public partial class GanttCanvas : UserControl
     { get => (double)GetValue(VisualAnchorTimeProperty); set => SetValue(VisualAnchorTimeProperty, value); }
     public IEnumerable<Guid>? CriticalPathItemIds
     { get => (IEnumerable<Guid>?)GetValue(CriticalPathItemIdsProperty); set => SetValue(CriticalPathItemIdsProperty, value); }
+    public string SearchText
+    { get => (string)GetValue(SearchTextProperty); set => SetValue(SearchTextProperty, value); }
 
     // ── Layout constants ──────────────────────────────────────────────────
     private double _laneHeaderW  = 150;
@@ -861,6 +867,130 @@ public partial class GanttCanvas : UserControl
         TextTrimming = TextTrimming.CharacterEllipsis,
     };
 
+    private static TextBlock CreateHighlightedBarText(
+        string text,
+        string searchText,
+        Brush foreground,
+        Brush barFill)
+    {
+        var matchForeground = CreateSearchMatchTextBrush(barFill, foreground);
+        var tb = CreateBarText("", matchForeground);
+        string query = searchText.Trim();
+        if (string.IsNullOrEmpty(query))
+        {
+            tb.Text = text;
+            return tb;
+        }
+
+        int start = text.IndexOf(query, StringComparison.OrdinalIgnoreCase);
+        if (start < 0)
+        {
+            tb.Text = text;
+            return tb;
+        }
+
+        if (start > 0)
+            tb.Inlines.Add(new Run(text[..start]));
+
+        tb.Inlines.Add(new Run(text.Substring(start, query.Length))
+        {
+            FontWeight = FontWeights.Bold,
+        });
+
+        int after = start + query.Length;
+        if (after < text.Length)
+            tb.Inlines.Add(new Run(text[after..]));
+
+        return tb;
+    }
+
+    private static Brush CreateSearchMatchTextBrush(Brush barFill, Brush normalForeground)
+    {
+        if (barFill is not SolidColorBrush fillBrush)
+            return normalForeground;
+
+        var fill = fillBrush.Color;
+        var normal = normalForeground is SolidColorBrush normalBrush
+            ? normalBrush.Color
+            : GetReadableTextColor(fill);
+        var candidates = BuildSearchTextColorCandidates(fill);
+        var color = candidates
+            .OrderByDescending(candidate => ScoreSearchTextColor(candidate, fill, normal))
+            .FirstOrDefault(GetReadableTextColor(fill));
+
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
+
+    private static IEnumerable<Color> BuildSearchTextColorCandidates(Color fill)
+    {
+        var readable = GetReadableTextColor(fill);
+        var opposite = readable == Colors.White ? Colors.Black : Colors.White;
+
+        yield return MixColors(readable, fill, 0.42);
+        yield return MixColors(readable, fill, 0.55);
+        yield return MixColors(readable, fill, 0.68);
+        yield return MixColors(opposite, fill, 0.42);
+        yield return MixColors(opposite, fill, 0.55);
+        yield return MixColors(opposite, fill, 0.68);
+        yield return readable;
+    }
+
+    private static double ScoreSearchTextColor(Color candidate, Color fill, Color normal)
+    {
+        double contrast = ContrastRatio(candidate, fill);
+        double distance = ColorDistance(candidate, normal) / 441.6729559300637;
+        double readableBonus = contrast >= 4.5 ? 100 : contrast >= 3.0 ? 20 : 0;
+
+        return readableBonus + contrast * 10 + distance * 18;
+    }
+
+    private static Color GetReadableTextColor(Color background)
+        => ContrastRatio(Colors.White, background) >= ContrastRatio(Colors.Black, background)
+            ? Colors.White
+            : Colors.Black;
+
+    private static double ContrastRatio(Color foreground, Color background)
+    {
+        double lighter = Math.Max(RelativeLuminance(foreground), RelativeLuminance(background));
+        double darker = Math.Min(RelativeLuminance(foreground), RelativeLuminance(background));
+        return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    private static double RelativeLuminance(Color color)
+    {
+        static double Channel(byte value)
+        {
+            double normalized = value / 255.0;
+            return normalized <= 0.03928
+                ? normalized / 12.92
+                : Math.Pow((normalized + 0.055) / 1.055, 2.4);
+        }
+
+        return 0.2126 * Channel(color.R)
+             + 0.7152 * Channel(color.G)
+             + 0.0722 * Channel(color.B);
+    }
+
+    private static double ColorDistance(Color left, Color right)
+    {
+        double dr = left.R - right.R;
+        double dg = left.G - right.G;
+        double db = left.B - right.B;
+        return Math.Sqrt(dr * dr + dg * dg + db * db);
+    }
+
+    private static Color MixColors(Color overlay, Color baseColor, double amount)
+    {
+        amount = Math.Clamp(amount, 0, 1);
+        byte a = (byte)Math.Round(baseColor.A + (overlay.A - baseColor.A) * amount);
+        byte r = (byte)Math.Round(baseColor.R + (overlay.R - baseColor.R) * amount);
+        byte g = (byte)Math.Round(baseColor.G + (overlay.G - baseColor.G) * amount);
+        byte b = (byte)Math.Round(baseColor.B + (overlay.B - baseColor.B) * amount);
+        return Color.FromArgb(a, r, g, b);
+    }
+
     private static Border CreateBarBorder(double width, double height, Brush fill, double opacity = 1.0) => new()
     {
         Width = width,
@@ -876,17 +1006,53 @@ public partial class GanttCanvas : UserControl
         if (!_barRects.TryGetValue(item.Id, out var r)) return;
         var palette = ThemeService.CurrentPalette;
         var style = ResolveBarStyle(item);
+        bool isSearchMatch = IsSearchMatch(item);
+
+        if (isSearchMatch && !ghost)
+        {
+            Add(new Border
+            {
+                Width = r.Width + 6,
+                Height = r.Height + 6,
+                Background = Brushes.Transparent,
+                BorderBrush = palette.AccentOutline,
+                BorderThickness = new Thickness(1.5),
+                CornerRadius = new CornerRadius(7),
+                IsHitTestVisible = false,
+            }, r.Left - 3, r.Top - 3);
+        }
 
         var bar = CreateBarBorder(r.Width, r.Height, style.Fill, ghost ? 0.22 : 1.0);
-        bar.BorderBrush = item.HasErrors ? palette.Danger : Brushes.Transparent;
-        bar.BorderThickness = new Thickness(item.HasErrors ? 1.5 : 0);
+        bar.BorderBrush = item.HasErrors
+            ? palette.Danger
+            : isSearchMatch ? palette.AccentOutline : Brushes.Transparent;
+        bar.BorderThickness = new Thickness(item.HasErrors || isSearchMatch ? 1.5 : 0);
         bar.Cursor = Cursors.SizeAll;
         bar.ToolTip = BuildTooltip(item);
 
         if (r.Width > 24)
-            bar.Child = CreateBarText(item.Name, style.TextFill);
+            bar.Child = isSearchMatch
+                ? CreateHighlightedBarText(item.Name, SearchText, style.TextFill, style.Fill)
+                : CreateBarText(item.Name, style.TextFill);
 
         Add(bar, r.Left, r.Top);
+    }
+
+    private bool IsSearchMatch(ItemViewModel item)
+    {
+        if (string.IsNullOrWhiteSpace(SearchText))
+            return false;
+
+        string search = SearchText.Trim();
+        var laneName = Lanes?.FirstOrDefault(lane => lane.Id == item.LaneId)?.Name ?? "";
+        var categoryName = Categories?.FirstOrDefault(category => category.Id == item.CategoryId)?.Name ?? "";
+
+        return item.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+            || item.Description.Contains(search, StringComparison.OrdinalIgnoreCase)
+            || laneName.Contains(search, StringComparison.OrdinalIgnoreCase)
+            || categoryName.Contains(search, StringComparison.OrdinalIgnoreCase)
+            || item.PreConditions.Any(condition => condition.Value.Contains(search, StringComparison.OrdinalIgnoreCase))
+            || item.PostConditions.Any(condition => condition.Value.Contains(search, StringComparison.OrdinalIgnoreCase));
     }
 
     private void DrawDragGhost(ItemViewModel item, double ppu)
