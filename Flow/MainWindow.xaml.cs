@@ -173,38 +173,8 @@ public partial class MainWindow : Window
 
     private void OnCloseWindow(object sender, RoutedEventArgs e) => Close();
 
-    private List<IUndoableCommand> BuildTimelineCommands(IReadOnlyList<TimelineEditChange> changes)
-    {
-        var commands = new List<IUndoableCommand>();
-        foreach (var change in changes)
-        {
-            if (Math.Abs(change.OldStartTime - change.NewStartTime) > 1e-9)
-            {
-                commands.Add(new PropertyChangeCommand<double>(
-                    value => change.Item.StartTime = value,
-                    change.OldStartTime,
-                    change.NewStartTime));
-            }
-
-            if (Math.Abs(change.OldDuration - change.NewDuration) > 1e-9)
-            {
-                commands.Add(new PropertyChangeCommand<double>(
-                    value => change.Item.Duration = value,
-                    change.OldDuration,
-                    change.NewDuration));
-            }
-
-            if (change.OldLaneId != change.NewLaneId)
-            {
-                commands.Add(new PropertyChangeCommand<Guid>(
-                    value => change.Item.LaneId = value,
-                    change.OldLaneId,
-                    change.NewLaneId));
-            }
-        }
-
-        return commands;
-    }
+    private static List<IUndoableCommand> BuildTimelineCommands(IReadOnlyList<TimelineEditChange> changes) =>
+        TimelineEditCommandFactory.Create(changes);
 
     private void ExportPng()
     {

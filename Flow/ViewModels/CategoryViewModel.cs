@@ -2,6 +2,7 @@ using System;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Flow.Models;
+using Flow.Services;
 
 namespace Flow.ViewModels;
 
@@ -36,8 +37,7 @@ public partial class CategoryViewModel : ObservableObject
     public Brush Brush => _brush;
 
     public Color ColorValue =>
-        string.IsNullOrEmpty(Color) ? Colors.Transparent
-        : TryParseColor(Color, out var c) ? c : Colors.Transparent;
+        ColorBrushService.ParseColorOrTransparent(Color);
 
     partial void OnColorChanged(string value)
     {
@@ -48,18 +48,6 @@ public partial class CategoryViewModel : ObservableObject
 
     public ProjectCategory ToModel() => new() { Id = Id, Name = Name, Color = Color };
 
-    private static Brush CreateBrush(string? hex)
-    {
-        if (string.IsNullOrEmpty(hex) || !TryParseColor(hex, out var color))
-            return Brushes.Transparent;
-        var b = new SolidColorBrush(color);
-        b.Freeze();
-        return b;
-    }
-
-    private static bool TryParseColor(string hex, out Color color)
-    {
-        try { color = (Color)ColorConverter.ConvertFromString(hex); return true; }
-        catch { color = Colors.Transparent; return false; }
-    }
+    private static Brush CreateBrush(string? hex) =>
+        ColorBrushService.CreateFrozenBrush(hex);
 }

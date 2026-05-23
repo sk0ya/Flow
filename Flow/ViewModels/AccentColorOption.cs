@@ -1,4 +1,5 @@
 using System.Windows.Media;
+using Flow.Services;
 
 namespace Flow.ViewModels;
 
@@ -15,11 +16,6 @@ public sealed class AccentColorOption
     public string ColorHex { get; }
     public Brush SwatchBrush { get; }
 
-    private static Brush CreateBrush(string colorHex)
-    {
-        var color = (Color)ColorConverter.ConvertFromString(colorHex);
-        var brush = new SolidColorBrush(color);
-        brush.Freeze();
-        return brush;
-    }
+    private static Brush CreateBrush(string colorHex) =>
+        ColorBrushService.CreateFrozenBrush(colorHex);
 }

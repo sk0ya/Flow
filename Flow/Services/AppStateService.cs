@@ -1,19 +1,12 @@
 using System;
 using System.IO;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Flow.Models;
 
 namespace Flow.Services;
 
 public class AppStateService
 {
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
-
     private readonly string _stateFilePath;
 
     public AppStateService()
@@ -33,7 +26,7 @@ public class AppStateService
                 return new AppState();
 
             var json = File.ReadAllText(_stateFilePath);
-            return JsonSerializer.Deserialize<AppState>(json, Options) ?? new AppState();
+            return JsonSerializer.Deserialize<AppState>(json, StorageJson.Options) ?? new AppState();
         }
         catch
         {
@@ -47,7 +40,7 @@ public class AppStateService
         if (!string.IsNullOrWhiteSpace(directory))
             Directory.CreateDirectory(directory);
 
-        var json = JsonSerializer.Serialize(state, Options);
+        var json = JsonSerializer.Serialize(state, StorageJson.Options);
         File.WriteAllText(_stateFilePath, json);
     }
 }

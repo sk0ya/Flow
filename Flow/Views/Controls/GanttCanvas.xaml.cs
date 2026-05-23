@@ -833,48 +833,58 @@ public partial class GanttCanvas : UserControl
 
     // ── Bar rendering ─────────────────────────────────────────────────────
 
+    private (Brush Fill, Brush TextFill) ResolveBarStyle(ItemViewModel item)
+    {
+        var palette = ThemeService.CurrentPalette;
+        var category = item.CategoryId != Guid.Empty
+            ? Categories?.FirstOrDefault(c => c.Id == item.CategoryId)
+            : null;
+
+        Brush fill = item.HasErrors
+            ? palette.DangerSoft
+            : category?.Brush ?? palette.Accent;
+        Brush textFill = item.HasErrors || category == null
+            ? palette.AccentText
+            : ColorBrushService.CreateReadableTextBrush(category.ColorValue);
+
+        return (fill, textFill);
+    }
+
+    private static TextBlock CreateBarText(string text, Brush foreground) => new()
+    {
+        Text = text,
+        FontSize = 11,
+        Foreground = foreground,
+        FontWeight = FontWeights.SemiBold,
+        Margin = new Thickness(7, 0, 7, 0),
+        VerticalAlignment = VerticalAlignment.Center,
+        TextTrimming = TextTrimming.CharacterEllipsis,
+    };
+
+    private static Border CreateBarBorder(double width, double height, Brush fill, double opacity = 1.0) => new()
+    {
+        Width = width,
+        Height = height,
+        Background = fill,
+        CornerRadius = new CornerRadius(5),
+        Opacity = opacity,
+        ClipToBounds = true,
+    };
+
     private void DrawBar(ItemViewModel item, bool ghost)
     {
         if (!_barRects.TryGetValue(item.Id, out var r)) return;
         var palette = ThemeService.CurrentPalette;
+        var style = ResolveBarStyle(item);
 
-        var category = item.CategoryId != Guid.Empty
-            ? Categories?.FirstOrDefault(c => c.Id == item.CategoryId)
-            : null;
-        Brush fill = item.HasErrors
-            ? palette.DangerSoft
-            : (category != null ? category.Brush : palette.Accent);
-        Brush textFill = item.HasErrors || category == null
-            ? palette.AccentText
-            : GetCategoryTextBrush(category.ColorValue);
-
-        var bar = new Border
-        {
-            Width  = r.Width,
-            Height = r.Height,
-            Background = fill,
-            CornerRadius = new CornerRadius(5),
-            Opacity = ghost ? 0.22 : 1.0,
-            BorderBrush = item.HasErrors ? palette.Danger : Brushes.Transparent,
-            BorderThickness = new Thickness(item.HasErrors ? 1.5 : 0),
-            Cursor = Cursors.SizeAll,
-            ToolTip = BuildTooltip(item),
-            ClipToBounds = true,
-        };
+        var bar = CreateBarBorder(r.Width, r.Height, style.Fill, ghost ? 0.22 : 1.0);
+        bar.BorderBrush = item.HasErrors ? palette.Danger : Brushes.Transparent;
+        bar.BorderThickness = new Thickness(item.HasErrors ? 1.5 : 0);
+        bar.Cursor = Cursors.SizeAll;
+        bar.ToolTip = BuildTooltip(item);
 
         if (r.Width > 24)
-        {
-            bar.Child = new TextBlock
-            {
-                Text = item.Name,
-                FontSize = 11,
-                Foreground = textFill,
-                FontWeight = FontWeights.SemiBold,
-                Margin = new Thickness(7, 0, 7, 0),
-                VerticalAlignment = VerticalAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-            };
-        }
+            bar.Child = CreateBarText(item.Name, style.TextFill);
 
         Add(bar, r.Left, r.Top);
     }
@@ -886,16 +896,7 @@ public partial class GanttCanvas : UserControl
         double ghostW = Math.Max(item.Duration * pps, MinBarW);
         double ghostY = _dragLaneIdx * LaneH + (LaneH - BarH) / 2.0;
         var palette = ThemeService.CurrentPalette;
-
-        var category = item.CategoryId != Guid.Empty
-            ? Categories?.FirstOrDefault(c => c.Id == item.CategoryId)
-            : null;
-        Brush fill = item.HasErrors
-            ? palette.DangerSoft
-            : (category != null ? category.Brush : palette.Accent);
-        Brush textFill = item.HasErrors || category == null
-            ? palette.AccentText
-            : GetCategoryTextBrush(category.ColorValue);
+        var style = ResolveBarStyle(item);
 
         // shadow
         Add(new Border
@@ -908,30 +909,11 @@ public partial class GanttCanvas : UserControl
         }, ghostX + 3, ghostY + 5);
 
         // floating bar
-        var ghost = new Border
-        {
-            Width = ghostW,
-            Height = BarH,
-            Background = fill,
-            CornerRadius = new CornerRadius(5),
-            BorderBrush = palette.TextPrimary,
-            BorderThickness = new Thickness(1.5),
-            Opacity = 0.88,
-            ClipToBounds = true,
-        };
+        var ghost = CreateBarBorder(ghostW, BarH, style.Fill, 0.88);
+        ghost.BorderBrush = palette.TextPrimary;
+        ghost.BorderThickness = new Thickness(1.5);
         if (ghostW > 24)
-        {
-            ghost.Child = new TextBlock
-            {
-                Text = item.Name,
-                FontSize = 11,
-                Foreground = textFill,
-                FontWeight = FontWeights.SemiBold,
-                Margin = new Thickness(7, 0, 7, 0),
-                VerticalAlignment = VerticalAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-            };
-        }
+            ghost.Child = CreateBarText(item.Name, style.TextFill);
         Add(ghost, ghostX, ghostY - 2);
     }
 
@@ -967,37 +949,10 @@ public partial class GanttCanvas : UserControl
             double bw = Math.Max(item.Duration * pps, MinBarW);
             double by = ghostY + 1 + (LaneH - BarH) / 2.0;
 
-            var category = item.CategoryId != Guid.Empty
-                ? Categories?.FirstOrDefault(c => c.Id == item.CategoryId)
-                : null;
-            Brush fill = item.HasErrors
-                ? palette.DangerSoft
-                : (category != null ? category.Brush : palette.Accent);
-
-            var bar = new Border
-            {
-                Width = bw, Height = BarH,
-                Background = fill,
-                CornerRadius = new CornerRadius(5),
-                Opacity = 0.88,
-                ClipToBounds = true,
-            };
+            var style = ResolveBarStyle(item);
+            var bar = CreateBarBorder(bw, BarH, style.Fill, 0.88);
             if (bw > 24)
-            {
-                Brush textFill = item.HasErrors || category == null
-                    ? palette.AccentText
-                    : GetCategoryTextBrush(category.ColorValue);
-                bar.Child = new TextBlock
-                {
-                    Text = item.Name,
-                    FontSize = 11,
-                    Foreground = textFill,
-                    FontWeight = FontWeights.SemiBold,
-                    Margin = new Thickness(7, 0, 7, 0),
-                    VerticalAlignment = VerticalAlignment.Center,
-                    TextTrimming = TextTrimming.CharacterEllipsis,
-                };
-            }
+                bar.Child = CreateBarText(item.Name, style.TextFill);
             Add(bar, bx, by);
         }
     }
@@ -1027,32 +982,8 @@ public partial class GanttCanvas : UserControl
         double endTime = _createStartTime + _createCurrentDuration;
         double endX    = endTime * pps;
         double barY    = _createLaneIdx * LaneH + (LaneH - BarH) / 2.0;
-        var palette    = ThemeService.CurrentPalette;
 
-        var sp = new StackPanel();
-        sp.Children.Add(new TextBlock
-        {
-            Text       = $"所要  {HmsConverter.Format(_createCurrentDuration)}",
-            FontSize   = 10,
-            Foreground = palette.TextSecondary,
-        });
-        sp.Children.Add(new TextBlock
-        {
-            Text       = $"完了  {HmsConverter.Format(endTime)}",
-            FontSize   = 10,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = palette.TextPrimary,
-        });
-
-        var label = new Border
-        {
-            Background      = palette.Surface,
-            BorderBrush     = palette.Accent,
-            BorderThickness = new Thickness(1),
-            CornerRadius    = new CornerRadius(4),
-            Padding         = new Thickness(6, 3, 6, 3),
-            Child           = sp,
-        };
+        var label = CreateDurationInfoLabel(_createCurrentDuration, endTime);
         Panel.SetZIndex(label, int.MaxValue);
 
         const double labelW = 108;
@@ -1073,12 +1004,21 @@ public partial class GanttCanvas : UserControl
         else
             return;
 
-        var palette = ThemeService.CurrentPalette;
+        var label = CreateDurationInfoLabel(item.Duration, endTime);
+        Panel.SetZIndex(label, int.MaxValue);
 
+        const double labelW = 108;
+        const double labelH = 38;
+        Add(label, Math.Max(0, endX - labelW / 2), Math.Max(0, barY - labelH - 6));
+    }
+
+    private static Border CreateDurationInfoLabel(double duration, double endTime)
+    {
+        var palette = ThemeService.CurrentPalette;
         var sp = new StackPanel();
         sp.Children.Add(new TextBlock
         {
-            Text       = $"所要  {HmsConverter.Format(item.Duration)}",
+            Text       = $"所要  {HmsConverter.Format(duration)}",
             FontSize   = 10,
             Foreground = palette.TextSecondary,
         });
@@ -1090,7 +1030,7 @@ public partial class GanttCanvas : UserControl
             Foreground = palette.TextPrimary,
         });
 
-        var label = new Border
+        return new Border
         {
             Background      = palette.Surface,
             BorderBrush     = palette.Accent,
@@ -1099,11 +1039,6 @@ public partial class GanttCanvas : UserControl
             Padding         = new Thickness(6, 3, 6, 3),
             Child           = sp,
         };
-        Panel.SetZIndex(label, int.MaxValue);
-
-        const double labelW = 108;
-        const double labelH = 38;
-        Add(label, Math.Max(0, endX - labelW / 2), Math.Max(0, barY - labelH - 6));
     }
 
     private void DrawAddLaneZone(double totalW)
@@ -1238,19 +1173,7 @@ public partial class GanttCanvas : UserControl
 
         double boxY = laneIndex * LaneH - TimelineScrollViewer.VerticalOffset + (LaneH - 24) / 2.0;
 
-        _renameBox = new TextBox
-        {
-            Text = lane.Name,
-            Width = LaneHeaderW - 10,
-            Height = 24,
-            FontSize = 11,
-            Padding = new Thickness(5, 2, 5, 2),
-            BorderBrush = ThemeService.CurrentPalette.Accent,
-            BorderThickness = new Thickness(1.5),
-            Background = ThemeService.CurrentPalette.Surface,
-            Foreground = ThemeService.CurrentPalette.TextPrimary,
-            VerticalContentAlignment = VerticalAlignment.Center,
-        };
+        _renameBox = CreateRenameTextBox(lane.Name, LaneHeaderW - 10);
         _renameBox.KeyDown   += OnRenameKeyDown;
         _renameBox.LostFocus += OnRenameLostFocus;
 
@@ -1314,19 +1237,7 @@ public partial class GanttCanvas : UserControl
         _renamingItemOldName = item.Name;
         _discardRenamingItemOnCancel = discardOnCancel;
 
-        _taskRenameBox = new TextBox
-        {
-            Text = item.Name,
-            Width = Math.Clamp(rect.Width + 24, 120, 280),
-            Height = 24,
-            FontSize = 11,
-            Padding = new Thickness(5, 2, 5, 2),
-            BorderBrush = ThemeService.CurrentPalette.Accent,
-            BorderThickness = new Thickness(1.5),
-            Background = ThemeService.CurrentPalette.Surface,
-            Foreground = ThemeService.CurrentPalette.TextPrimary,
-            VerticalContentAlignment = VerticalAlignment.Center,
-        };
+        _taskRenameBox = CreateRenameTextBox(item.Name, Math.Clamp(rect.Width + 24, 120, 280));
         _taskRenameBox.KeyDown += OnTaskRenameKeyDown;
         _taskRenameBox.LostFocus += OnTaskRenameLostFocus;
 
@@ -1336,6 +1247,24 @@ public partial class GanttCanvas : UserControl
         RootCanvas.Children.Add(_taskRenameBox);
         _taskRenameBox.Focus();
         _taskRenameBox.SelectAll();
+    }
+
+    private static TextBox CreateRenameTextBox(string text, double width)
+    {
+        var palette = ThemeService.CurrentPalette;
+        return new TextBox
+        {
+            Text = text,
+            Width = width,
+            Height = 24,
+            FontSize = 11,
+            Padding = new Thickness(5, 2, 5, 2),
+            BorderBrush = palette.Accent,
+            BorderThickness = new Thickness(1.5),
+            Background = palette.Surface,
+            Foreground = palette.TextPrimary,
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
     }
 
     private void CommitTaskRename(bool cancel = false)
@@ -1488,14 +1417,6 @@ public partial class GanttCanvas : UserControl
     {
         var alpha = ThemeService.CurrentPalette.IsDark ? (byte)90 : (byte)60;
         return new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255));
-    }
-
-    private static Brush GetCategoryTextBrush(Color color)
-    {
-        double luminance = (0.299 * color.R + 0.587 * color.G + 0.114 * color.B) / 255.0;
-        return luminance > 0.62
-            ? new SolidColorBrush(Color.FromRgb(32, 33, 36))
-            : Brushes.White;
     }
 
     private Dictionary<Guid, (double StartTime, double Duration, Guid LaneId)> CaptureItemStates()
@@ -2208,25 +2129,25 @@ public partial class GanttCanvas : UserControl
         menu.Items.Add(new Separator());
 
         // ── Pre-conditions ────────────────────────────────────────────────
-        menu.Items.Add(MakeMenuLabel("前提条件", palette));
-        foreach (var cond in item.PreConditions.ToList())
-        {
-            var c = cond;
-            var mi = new MenuItem
-            {
-                Header = c.Value,
-                Icon = new TextBlock { Text = "×", Foreground = palette.Danger, VerticalAlignment = VerticalAlignment.Center },
-            };
-            mi.Click += (_, _) => item.PreConditions.Remove(c);
-            menu.Items.Add(mi);
-        }
-        menu.Items.Add(MakeAddConditionItem(menu, palette, val => item.PreConditions.Add(new ConditionEntry(val))));
+        AppendConditionMenuSection(menu, palette, "前提条件", item.PreConditions);
 
         menu.Items.Add(new Separator());
 
         // ── Post-conditions ───────────────────────────────────────────────
-        menu.Items.Add(MakeMenuLabel("事後条件", palette));
-        foreach (var cond in item.PostConditions.ToList())
+        AppendConditionMenuSection(menu, palette, "事後条件", item.PostConditions);
+
+        AppendCanvasToolMenuItems(menu, palette);
+        return menu;
+    }
+
+    private void AppendConditionMenuSection(
+        ContextMenu menu,
+        ThemePalette palette,
+        string label,
+        ICollection<ConditionEntry> conditions)
+    {
+        menu.Items.Add(MakeMenuLabel(label, palette));
+        foreach (var cond in conditions.ToList())
         {
             var c = cond;
             var mi = new MenuItem
@@ -2234,13 +2155,11 @@ public partial class GanttCanvas : UserControl
                 Header = c.Value,
                 Icon = new TextBlock { Text = "×", Foreground = palette.Danger, VerticalAlignment = VerticalAlignment.Center },
             };
-            mi.Click += (_, _) => item.PostConditions.Remove(c);
+            mi.Click += (_, _) => conditions.Remove(c);
             menu.Items.Add(mi);
         }
-        menu.Items.Add(MakeAddConditionItem(menu, palette, val => item.PostConditions.Add(new ConditionEntry(val))));
 
-        AppendCanvasToolMenuItems(menu, palette);
-        return menu;
+        menu.Items.Add(MakeAddConditionItem(menu, palette, val => conditions.Add(new ConditionEntry(val))));
     }
 
     private ContextMenu BuildCanvasContextMenu()

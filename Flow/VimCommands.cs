@@ -236,31 +236,13 @@ internal static class VimCommands
 
     internal static bool DeleteVisualSelection(VimContext ctx)
     {
-        var tasks = ctx.VisualSelectionTasks().ToList();
-        if (tasks.Count == 0)
-        {
-            var current = ctx.TaskAtCursor();
-            if (current == null)
-                return false;
-
-            tasks.Add(current);
-        }
-
+        var tasks = ResolveVisualTaskSelection(ctx);
         return DeleteTasks(ctx, tasks);
     }
 
     internal static bool DeleteVisualLineSelection(VimContext ctx)
     {
-        var lanes = ctx.VisualLineSelectionLanes().ToList();
-        if (lanes.Count == 0)
-        {
-            var lane = ctx.ViewModel.Lanes.ElementAtOrDefault(ctx.ViewModel.CursorLaneIndex);
-            if (lane == null)
-                return false;
-
-            lanes.Add(lane);
-        }
-
+        var lanes = ResolveVisualLineSelection(ctx);
         return DeleteLanes(ctx, lanes);
     }
 
@@ -283,32 +265,34 @@ internal static class VimCommands
 
     internal static void YankVisualSelection(VimContext ctx)
     {
-        var tasks = ctx.VisualSelectionTasks().ToList();
-        if (tasks.Count == 0)
-        {
-            var current = ctx.TaskAtCursor();
-            if (current == null)
-                return;
-
-            tasks.Add(current);
-        }
-
+        var tasks = ResolveVisualTaskSelection(ctx);
         YankTaskSelection(ctx, tasks);
     }
 
     internal static void YankVisualLineSelection(VimContext ctx)
     {
-        var lanes = ctx.VisualLineSelectionLanes().ToList();
-        if (lanes.Count == 0)
-        {
-            var current = ctx.ViewModel.Lanes.ElementAtOrDefault(ctx.ViewModel.CursorLaneIndex);
-            if (current == null)
-                return;
-
-            lanes.Add(current);
-        }
-
+        var lanes = ResolveVisualLineSelection(ctx);
         YankLaneSelection(ctx, lanes);
+    }
+
+    private static List<ItemViewModel> ResolveVisualTaskSelection(VimContext ctx)
+    {
+        var tasks = ctx.VisualSelectionTasks().ToList();
+        if (tasks.Count > 0)
+            return tasks;
+
+        var current = ctx.TaskAtCursor();
+        return current != null ? [current] : [];
+    }
+
+    private static List<LaneViewModel> ResolveVisualLineSelection(VimContext ctx)
+    {
+        var lanes = ctx.VisualLineSelectionLanes().ToList();
+        if (lanes.Count > 0)
+            return lanes;
+
+        var current = ctx.ViewModel.Lanes.ElementAtOrDefault(ctx.ViewModel.CursorLaneIndex);
+        return current != null ? [current] : [];
     }
 
     // ── Paste ─────────────────────────────────────────────────────────────
@@ -597,34 +581,7 @@ internal static class VimCommands
         if (changes.Count == 0)
             return false;
 
-        var commands = new List<IUndoableCommand>();
-        foreach (var change in changes)
-        {
-            if (Math.Abs(change.OldStartTime - change.NewStartTime) > 1e-9)
-            {
-                commands.Add(new PropertyChangeCommand<double>(
-                    value => change.Item.StartTime = value,
-                    change.OldStartTime,
-                    change.NewStartTime));
-            }
-
-            if (Math.Abs(change.OldDuration - change.NewDuration) > 1e-9)
-            {
-                commands.Add(new PropertyChangeCommand<double>(
-                    value => change.Item.Duration = value,
-                    change.OldDuration,
-                    change.NewDuration));
-            }
-
-            if (change.OldLaneId != change.NewLaneId)
-            {
-                commands.Add(new PropertyChangeCommand<Guid>(
-                    value => change.Item.LaneId = value,
-                    change.OldLaneId,
-                    change.NewLaneId));
-            }
-        }
-
+        var commands = TimelineEditCommandFactory.Create(changes);
         if (commands.Count == 0)
             return false;
 

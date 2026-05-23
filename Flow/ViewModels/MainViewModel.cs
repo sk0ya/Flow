@@ -198,11 +198,18 @@ public partial class MainViewModel : ObservableObject
 
     private void NotifyPanelProperties()
     {
-        OnPropertyChanged(nameof(IsProjectListActive));
-        OnPropertyChanged(nameof(IsProjectSettingsActive));
-        OnPropertyChanged(nameof(IsCanvasToolsActive));
-        OnPropertyChanged(nameof(IsTaskEditorActive));
-        OnPropertyChanged(nameof(IsAppSettingsActive));
+        NotifyProperties(
+            nameof(IsProjectListActive),
+            nameof(IsProjectSettingsActive),
+            nameof(IsCanvasToolsActive),
+            nameof(IsTaskEditorActive),
+            nameof(IsAppSettingsActive));
+    }
+
+    private void NotifyProperties(params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+            OnPropertyChanged(propertyName);
     }
 
     public MainViewModel(
@@ -268,18 +275,23 @@ public partial class MainViewModel : ObservableObject
     // ── Suggestions ──────────────────────────────────────────────────────
 
     public List<SuggestionItem> GetPreSuggestions(Guid forId, string filter) =>
-        Items.Where(i => i.Id != forId)
-             .SelectMany(i => i.PostConditions.Select(e => new SuggestionItem(e.Value, i.Name)))
-             .GroupBy(s => s.Value, StringComparer.OrdinalIgnoreCase).Select(g => g.First())
-             .Where(s => string.IsNullOrEmpty(filter) || s.Value.Contains(filter, StringComparison.OrdinalIgnoreCase))
-             .OrderBy(s => s.Value).Take(8).ToList();
+        GetConditionSuggestions(forId, filter, item => item.PostConditions);
 
     public List<SuggestionItem> GetPostSuggestions(Guid forId, string filter) =>
-        Items.Where(i => i.Id != forId)
-             .SelectMany(i => i.PreConditions.Select(e => new SuggestionItem(e.Value, i.Name)))
-             .GroupBy(s => s.Value, StringComparer.OrdinalIgnoreCase).Select(g => g.First())
-             .Where(s => string.IsNullOrEmpty(filter) || s.Value.Contains(filter, StringComparison.OrdinalIgnoreCase))
-             .OrderBy(s => s.Value).Take(8).ToList();
+        GetConditionSuggestions(forId, filter, item => item.PreConditions);
+
+    private List<SuggestionItem> GetConditionSuggestions(
+        Guid forId,
+        string filter,
+        Func<ItemViewModel, IEnumerable<ConditionEntry>> conditionsSelector) =>
+        Items.Where(item => item.Id != forId)
+             .SelectMany(item => conditionsSelector(item).Select(entry => new SuggestionItem(entry.Value, item.Name)))
+             .GroupBy(suggestion => suggestion.Value, StringComparer.OrdinalIgnoreCase)
+             .Select(group => group.First())
+             .Where(suggestion => string.IsNullOrEmpty(filter) || suggestion.Value.Contains(filter, StringComparison.OrdinalIgnoreCase))
+             .OrderBy(suggestion => suggestion.Value)
+             .Take(8)
+             .ToList();
 
     // ── Category color palette ────────────────────────────────────────────
 
@@ -292,6 +304,12 @@ public partial class MainViewModel : ObservableObject
     private string NextCategoryColor() =>
         CategoryColorPalette[Categories.Count % CategoryColorPalette.Length];
 
+    private void NotifyCategoryPickerChanged() =>
+        OnPropertyChanged(nameof(CategoriesForPicker));
+
+    private void NotifyCategoryViewsChanged() =>
+        NotifyProperties(nameof(CategoriesForPicker), nameof(CategoriesForFilter));
+
     // ── Category commands ─────────────────────────────────────────────────
 
     [RelayCommand]
@@ -303,7 +321,7 @@ public partial class MainViewModel : ObservableObject
         Subscribe(cat);
         Categories.Add(cat);
         NewCategoryName = "";
-        OnPropertyChanged(nameof(CategoriesForPicker));
+        NotifyCategoryPickerChanged();
     }
 
     [RelayCommand]
@@ -313,7 +331,7 @@ public partial class MainViewModel : ObservableObject
         foreach (var item in Items.Where(i => i.CategoryId == cat.Id))
             item.CategoryId = Guid.Empty;
         Categories.Remove(cat);
-        OnPropertyChanged(nameof(CategoriesForPicker));
+        NotifyCategoryPickerChanged();
         Analyze();
         RequestAutoSave();
     }
@@ -647,7 +665,7 @@ public partial class MainViewModel : ObservableObject
             SelectedItem    = null;
             CanUndoDelete   = false;
             IsDirty         = false;
-            OnPropertyChanged(nameof(CategoriesForPicker));
+            NotifyCategoryPickerChanged();
             _draftService.DeleteDraft();
             SetActivePanel(SidebarPanel.ProjectSettings);
             RefreshFilteredView();
@@ -868,8 +886,7 @@ public partial class MainViewModel : ObservableObject
                     Categories.Add(vm);
                 }
 
-                OnPropertyChanged(nameof(CategoriesForPicker));
-                OnPropertyChanged(nameof(CategoriesForFilter));
+                NotifyCategoryViewsChanged();
 
                 foreach (var lane in project.Lanes)
                     Lanes.Add(new LaneViewModel(lane));
@@ -1060,8 +1077,7 @@ public partial class MainViewModel : ObservableObject
 
     private void OnCategoriesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        OnPropertyChanged(nameof(CategoriesForPicker));
-        OnPropertyChanged(nameof(CategoriesForFilter));
+        NotifyCategoryViewsChanged();
         Analyze();
         RequestAutoSave();
     }
@@ -1391,9 +1407,7 @@ public partial class MainViewModel : ObservableObject
     {
         CellDuration = NormalizeCellDuration(CellDuration);
         SyncCellDurationText();
-        OnPropertyChanged(nameof(CellDurationValue));
-        OnPropertyChanged(nameof(CellDurationUnitLabel));
-        OnPropertyChanged(nameof(CellDurationSummary));
+        NotifyCellDurationDisplayProperties();
         Analyze();
         RequestAutoSave();
     }
@@ -1408,11 +1422,15 @@ public partial class MainViewModel : ObservableObject
         }
 
         SyncCellDurationText();
-        OnPropertyChanged(nameof(CellDurationValue));
-        OnPropertyChanged(nameof(CellDurationUnitLabel));
-        OnPropertyChanged(nameof(CellDurationSummary));
+        NotifyCellDurationDisplayProperties();
         RequestAutoSave();
     }
+
+    private void NotifyCellDurationDisplayProperties() =>
+        NotifyProperties(
+            nameof(CellDurationValue),
+            nameof(CellDurationUnitLabel),
+            nameof(CellDurationSummary));
 
     partial void OnCellDurationErrorChanged(string? value)
     {
@@ -1488,11 +1506,15 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        OnPropertyChanged(nameof(ZoomScale));
-        OnPropertyChanged(nameof(PixelsPerUnit));
-        OnPropertyChanged(nameof(CanZoomIn));
-        OnPropertyChanged(nameof(CanZoomOut));
+        NotifyZoomProperties();
     }
+
+    private void NotifyZoomProperties() =>
+        NotifyProperties(
+            nameof(ZoomScale),
+            nameof(PixelsPerUnit),
+            nameof(CanZoomIn),
+            nameof(CanZoomOut));
 
     partial void OnIsDirtyChanged(bool value)
     {

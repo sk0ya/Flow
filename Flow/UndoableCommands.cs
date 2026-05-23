@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using Flow.ViewModels;
+using Flow.Views.Controls;
 
 namespace Flow;
 
@@ -16,6 +17,42 @@ public sealed class PropertyChangeCommand<T>(Action<T> setter, T before, T after
 {
     public void Undo() => setter(before);
     public void Redo() => setter(after);
+}
+
+public static class TimelineEditCommandFactory
+{
+    public static List<IUndoableCommand> Create(IReadOnlyList<TimelineEditChange> changes)
+    {
+        var commands = new List<IUndoableCommand>();
+        foreach (var change in changes)
+        {
+            if (Math.Abs(change.OldStartTime - change.NewStartTime) > 1e-9)
+            {
+                commands.Add(new PropertyChangeCommand<double>(
+                    value => change.Item.StartTime = value,
+                    change.OldStartTime,
+                    change.NewStartTime));
+            }
+
+            if (Math.Abs(change.OldDuration - change.NewDuration) > 1e-9)
+            {
+                commands.Add(new PropertyChangeCommand<double>(
+                    value => change.Item.Duration = value,
+                    change.OldDuration,
+                    change.NewDuration));
+            }
+
+            if (change.OldLaneId != change.NewLaneId)
+            {
+                commands.Add(new PropertyChangeCommand<Guid>(
+                    value => change.Item.LaneId = value,
+                    change.OldLaneId,
+                    change.NewLaneId));
+            }
+        }
+
+        return commands;
+    }
 }
 
 public sealed class AddItemCommand(ObservableCollection<ItemViewModel> items, ItemViewModel item) : IUndoableCommand

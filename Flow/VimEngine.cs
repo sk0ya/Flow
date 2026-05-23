@@ -327,30 +327,15 @@ public sealed class VimEngine
         string candidate = _buffer + token;
         int count = ParsePendingCount();
 
-        foreach (var registry in EnumerateActiveRegistries())
+        if (TryFindCommand(candidate, out var command))
         {
-            if (!registry.TryGetCommand(candidate, out var command)) continue;
             ClearPendingInput();
-            CurrentCommandCount = count;
-            try
-            {
-                for (int index = 0; index < count; index++)
-                {
-                    CurrentCommandIteration = index + 1;
-                    command(context);
-                }
-            }
-            finally
-            {
-                CurrentCommandCount = 1;
-                CurrentCommandIteration = 0;
-            }
+            ExecuteCommand(command, context, count);
             return true;
         }
 
-        foreach (var registry in EnumerateActiveRegistries())
+        if (HasActivePrefix(candidate))
         {
-            if (!registry.HasPrefix(candidate)) continue;
             _buffer = candidate;
             _clearTimer.Stop();
             _clearTimer.Start();
@@ -359,14 +344,48 @@ public sealed class VimEngine
 
         ClearPendingInput();
 
-        foreach (var registry in EnumerateActiveRegistries())
+        if (TryFindCommand(token, out var fallback))
         {
-            if (!registry.TryGetCommand(token, out var fallback)) continue;
             fallback(context);
             return true;
         }
 
         return false;
+    }
+
+    private bool TryFindCommand(string sequence, [NotNullWhen(true)] out Action<VimContext>? command)
+    {
+        foreach (var registry in EnumerateActiveRegistries())
+        {
+            if (!registry.TryGetCommand(sequence, out command))
+                continue;
+
+            return true;
+        }
+
+        command = null;
+        return false;
+    }
+
+    private bool HasActivePrefix(string sequence)
+        => EnumerateActiveRegistries().Any(registry => registry.HasPrefix(sequence));
+
+    private void ExecuteCommand(Action<VimContext> command, VimContext context, int count)
+    {
+        CurrentCommandCount = count;
+        try
+        {
+            for (int index = 0; index < count; index++)
+            {
+                CurrentCommandIteration = index + 1;
+                command(context);
+            }
+        }
+        finally
+        {
+            CurrentCommandCount = 1;
+            CurrentCommandIteration = 0;
+        }
     }
 
     private bool TryAccumulateCount(string token)
