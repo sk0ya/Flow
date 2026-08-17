@@ -344,6 +344,7 @@
                     <TextBlock Text="カラーテーマ" Style="{StaticResource SectionLabel}"/>
                     <ComboBox ItemsSource="{Binding ThemeOptions}"
                               SelectedItem="{Binding SelectedThemeOption, Mode=TwoWay}"
+                              Height="44"
                               Style="{StaticResource InputComboBox}">
                         <ComboBox.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:ThemeOption}">
@@ -571,7 +572,7 @@
                     CornerRadius="10">
                 <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="54"/>
+                            <RowDefinition Height="66"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
@@ -580,7 +581,7 @@
                             BorderBrush="{DynamicResource AppBorderSoftBrush}"
                             BorderThickness="0,0,0,1"
                             CornerRadius="10,10,0,0"
-                            Padding="16,10">
+                            Padding="16,12">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal">
                                 <Border Width="6" Height="20" CornerRadius="3" Background="{DynamicResource AppAccentBrush}" Margin="0,0,9,0"/>

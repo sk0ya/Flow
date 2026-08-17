@@ -52,5 +52,22 @@
                     VerticalAlignment="Top"
                     ClipToBounds="False"/>
         </ScrollViewer>
+
+        <!-- Drag this divider to choose how much room lane names use. -->
+        <Border x:Name="LaneHeaderResizeGrip"
+                Grid.Row="0"
+                Grid.RowSpan="2"
+                Grid.Column="0"
+                Width="10"
+                HorizontalAlignment="Right"
+                Panel.ZIndex="10"
+                Background="Transparent"
+                Cursor="SizeWE"
+                ToolTip="ドラッグで幅を調整 / ダブルクリックで自動フィット">
+            <Border Width="1"
+                    HorizontalAlignment="Center"
+                    Background="{DynamicResource AppBorderStrongBrush}"
+                    Opacity="0.45"/>
+        </Border>
     </Grid>
 </UserControl>

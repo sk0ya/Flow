@@ -129,6 +129,12 @@ public partial class GanttCanvas : UserControl
     private double _laneHeaderW  = 150;
     private double LaneHeaderW   => _laneHeaderW;
     private bool   _needsAutoFit = true;
+    private bool   _laneHeaderManuallySized;
+    private bool   _isResizingLaneHeader;
+    private double _laneHeaderResizeStartX;
+    private double _laneHeaderResizeStartWidth;
+    private const double MinLaneHeaderW = 112;
+    private const double MaxLaneHeaderW = 500;
     private const double LaneH        = 36;
     private const double BarH         = 28;
     private const double TimeHeaderH  = 30;
@@ -350,6 +356,10 @@ public partial class GanttCanvas : UserControl
         Unloaded                           += OnUnloaded;
         SizeChanged                        += (_, _) => RenderFrozenLayers();
         FrozenLaneCanvas.SizeChanged       += OnFrozenLaneCanvasSizeChanged;
+
+        LaneHeaderResizeGrip.MouseLeftButtonDown += OnLaneHeaderResizeMouseDown;
+        LaneHeaderResizeGrip.MouseMove          += OnLaneHeaderResizeMouseMove;
+        LaneHeaderResizeGrip.MouseLeftButtonUp  += OnLaneHeaderResizeMouseUp;
     }
 
     // ── Collection subscription ───────────────────────────────────────────
@@ -359,13 +369,13 @@ public partial class GanttCanvas : UserControl
         var ctrl = (GanttCanvas)d;
         if (e.OldValue is INotifyCollectionChanged old) old.CollectionChanged -= ctrl.OnColl;
         if (e.NewValue is INotifyCollectionChanged nw)  nw.CollectionChanged  += ctrl.OnColl;
-        if (e.Property == LanesProperty) ctrl._needsAutoFit = true;
+        if (e.Property == LanesProperty && !ctrl._laneHeaderManuallySized) ctrl._needsAutoFit = true;
         ctrl.Render();
     }
 
     private void OnColl(object? s, NotifyCollectionChangedEventArgs e)
     {
-        if (ReferenceEquals(s, Lanes)) _needsAutoFit = true;
+        if (ReferenceEquals(s, Lanes) && !_laneHeaderManuallySized) _needsAutoFit = true;
         Render();
     }
 
@@ -393,8 +403,72 @@ public partial class GanttCanvas : UserControl
 
     public void RequestAutoFitLaneHeader()
     {
+        _laneHeaderManuallySized = false;
         _needsAutoFit = true;
         Render();
+    }
+
+    private void OnLaneHeaderResizeMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (IsRenaming)
+            return;
+
+        if (e.ClickCount >= 2)
+        {
+            FitLaneHeaderToContent();
+            e.Handled = true;
+            return;
+        }
+
+        _isResizingLaneHeader = true;
+        _laneHeaderManuallySized = true;
+        _needsAutoFit = false;
+        _laneHeaderResizeStartX = e.GetPosition(GanttLayoutGrid).X;
+        _laneHeaderResizeStartWidth = _laneHeaderW;
+        LaneHeaderResizeGrip.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void FitLaneHeaderToContent()
+    {
+        _isResizingLaneHeader = false;
+        if (LaneHeaderResizeGrip.IsMouseCaptured)
+            LaneHeaderResizeGrip.ReleaseMouseCapture();
+
+        _laneHeaderManuallySized = false;
+        _needsAutoFit = true;
+        Render();
+    }
+
+    private void OnLaneHeaderResizeMouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_isResizingLaneHeader)
+            return;
+
+        double currentX = e.GetPosition(GanttLayoutGrid).X;
+        double width = Math.Clamp(
+            _laneHeaderResizeStartWidth + currentX - _laneHeaderResizeStartX,
+            MinLaneHeaderW,
+            MaxLaneHeaderW);
+
+        if (Math.Abs(width - _laneHeaderW) < 0.5)
+            return;
+
+        _laneHeaderW = width;
+        GanttLayoutGrid.ColumnDefinitions[0].Width = new GridLength(width);
+        RenderFrozenLayers();
+        e.Handled = true;
+    }
+
+    private void OnLaneHeaderResizeMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_isResizingLaneHeader)
+            return;
+
+        _isResizingLaneHeader = false;
+        LaneHeaderResizeGrip.ReleaseMouseCapture();
+        RenderFrozenLayers();
+        e.Handled = true;
     }
 
     private void OnFrozenLaneCanvasSizeChanged(object sender, SizeChangedEventArgs e)
@@ -485,7 +559,7 @@ public partial class GanttCanvas : UserControl
     {
         if (IsRenaming) return;
 
-        if (IsLoaded && _needsAutoFit)
+        if (IsLoaded && _needsAutoFit && !_laneHeaderManuallySized)
         {
             double fw = CalcAutoFitLaneWidth();
             if (Math.Abs(fw - _laneHeaderW) > 1.0)
