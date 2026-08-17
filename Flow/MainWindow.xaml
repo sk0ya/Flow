@@ -263,7 +263,7 @@
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="56"/>
+            <RowDefinition Height="62"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="30"/>
@@ -274,21 +274,26 @@
                 Background="{DynamicResource AppSurfaceBrush}"
                 BorderBrush="{DynamicResource AppBorderBrush}"
                 BorderThickness="0,0,0,1">
-            <Grid Margin="18,0">
+            <Grid Margin="20,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,24,0" IsHitTestVisible="False">
-                    <TextBlock Text="⬡" FontSize="21" Foreground="{DynamicResource AppAccentBrush}" VerticalAlignment="Center"/>
-                    <TextBlock Text=" Flow" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource AppTextPrimaryBrush}" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,28,0" IsHitTestVisible="False">
+                    <Border Width="30" Height="30" CornerRadius="9" Background="{DynamicResource AppAccentSubtleBrush}" BorderBrush="{DynamicResource AppAccentOutlineBrush}" BorderThickness="1" Margin="0,0,9,0">
+                        <TextBlock Text="⬡" FontSize="17" Foreground="{DynamicResource AppAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Flow" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                        <TextBlock Text="タイムライン設計" FontSize="9" Foreground="{DynamicResource AppTextMutedBrush}" Margin="0,1,0,0"/>
+                    </StackPanel>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" IsHitTestVisible="False">
                     <TextBlock Text="{Binding ProjectName}"
-                               FontSize="14"
+                               FontSize="15"
                                FontWeight="SemiBold"
                                Foreground="{DynamicResource AppTextPrimaryBrush}"
                                TextTrimming="CharacterEllipsis"/>
@@ -304,6 +309,7 @@
                     <Button Content="開く" Style="{StaticResource ToolbarButton}" Command="{Binding OpenProjectCommand}" ToolTip="プロジェクトを開く"/>
                     <Button x:Name="AppearanceButton" Content="外観" Style="{StaticResource ToolbarButton}" Click="OnAppearanceClick" ToolTip="カラーテーマとアクセントカラー"/>
                     <Button Content="保存" Style="{StaticResource PrimaryButton}" Command="{Binding SaveProjectCommand}" ToolTip="保存（Ctrl+S）"/>
+                    <Border Width="1" Height="22" Background="{DynamicResource AppBorderBrush}" Margin="4,0,4,0"/>
                     <Button Style="{StaticResource TitleBarButton}" Click="OnMinimizeWindow" ToolTip="最小化">
                         <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="10" Text="&#xE921;"/>
                     </Button>
@@ -366,7 +372,7 @@
         </Popup>
 
         <!-- Main workspace: timeline and one stable inspector. -->
-        <Grid Grid.Row="1" Margin="14,12,14,12">
+        <Grid Grid.Row="1" Margin="16,14,16,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" MinWidth="520"/>
                 <ColumnDefinition Width="14"/>
@@ -375,7 +381,7 @@
 
             <Grid Grid.Column="0">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="82"/>
+                    <RowDefinition Height="98"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
@@ -385,11 +391,11 @@
                         BorderBrush="{DynamicResource AppBorderSoftBrush}"
                         BorderThickness="1"
                         CornerRadius="10,10,0,0"
-                        Padding="12,8,12,7">
+                        Padding="16,10,16,10">
                     <Grid>
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="40"/>
+                            <RowDefinition Height="32"/>
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -398,10 +404,10 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,18,0">
                             <StackPanel VerticalAlignment="Center" Margin="0,0,10,0">
-                                <TextBlock Text="タイムライン" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                                <TextBlock Text="{Binding FilterSummary}" FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"/>
+                                <TextBlock Text="タイムライン" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                <TextBlock Text="{Binding FilterSummary}" FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" Margin="0,2,0,0"/>
                             </StackPanel>
-                            <Border Background="{DynamicResource AppAccentSubtleBrush}" CornerRadius="8" Padding="8,3" Margin="0,0,6,0">
+                            <Border Background="{DynamicResource AppAccentSubtleBrush}" BorderBrush="{DynamicResource AppAccentOutlineBrush}" BorderThickness="1" CornerRadius="8" Padding="8,3" Margin="0,0,6,0">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="期間 " FontSize="10" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
                                     <TextBlock Text="{Binding ProjectDuration, Converter={StaticResource HmsConv}}"
@@ -426,10 +432,10 @@
                         </StackPanel>
 
                         <TextBlock Grid.Row="0" Grid.Column="1"
-                                   Text="空白をドラッグで作成　・　バーをドラッグで移動　・　右端で期間を変更"
+                                   Text="空白をドラッグして作成　　バーをドラッグして移動・期間変更"
                                    VerticalAlignment="Center"
                                    FontSize="10"
-                                   Foreground="{DynamicResource AppTextMutedBrush}"
+                                   Foreground="{DynamicResource AppTextSecondaryBrush}"
                                    TextTrimming="CharacterEllipsis"/>
 
                         <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
@@ -444,7 +450,7 @@
                                     Margin="0,0,8,0"
                                     Click="OnTimelineScaleClick"
                                     ToolTip="時間軸の単位・範囲・グリッド間隔を変更"/>
-                            <TextBlock Text="表示倍率" FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="倍率" FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <Button Content="−" Style="{StaticResource ToolbarButton}" Padding="8,4" Command="{Binding ZoomOutCommand}" ToolTip="時間軸を縮小"/>
                             <Button Command="{Binding ResetZoomCommand}"
                                     Background="{DynamicResource AppSurfaceAltBrush}"
@@ -501,16 +507,16 @@
                             </Border>
                         </Popup>
 
-                        <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,7,0,0">
+                        <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,0,0">
                             <TextBox x:Name="CanvasSearchBox"
-                                     Width="190"
+                                     Width="220"
                                      Style="{StaticResource InputBox}"
                                      FontSize="11"
                                      ToolTip="タスク名・説明・レーンを検索"
                                      Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"/>
-                            <Button Content="前の一致" Style="{StaticResource ToolbarButton}" Padding="8,4" Margin="5,0,0,0" Command="{Binding SelectPreviousMatchCommand}" ToolTip="前の検索結果へ移動"/>
-                            <Button Content="次の一致" Style="{StaticResource ToolbarButton}" Padding="8,4" Margin="4,0,10,0" Command="{Binding SelectNextMatchCommand}" ToolTip="次の検索結果へ移動"/>
-                            <ComboBox Width="120"
+                            <Button Content="‹" Style="{StaticResource ToolbarButton}" Padding="9,4" Margin="5,0,0,0" Command="{Binding SelectPreviousMatchCommand}" ToolTip="前の検索結果へ移動"/>
+                            <Button Content="›" Style="{StaticResource ToolbarButton}" Padding="9,4" Margin="2,0,10,0" Command="{Binding SelectNextMatchCommand}" ToolTip="次の検索結果へ移動"/>
+                            <ComboBox Width="142"
                                       ItemsSource="{Binding CategoriesForFilter}"
                                       SelectedItem="{Binding SelectedFilterCategory, Mode=TwoWay}"
                                       Style="{StaticResource InputComboBox}"
@@ -521,6 +527,7 @@
                                     </DataTemplate>
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
+                            <Border Width="1" Height="20" Background="{DynamicResource AppBorderBrush}" Margin="10,0,10,0"/>
                             <CheckBox Content="エラーのみ"
                                       Margin="10,0,0,0"
                                       VerticalAlignment="Center"
@@ -575,13 +582,57 @@
                             CornerRadius="10,10,0,0"
                             Padding="16,10">
                         <StackPanel>
-                            <TextBlock Text="インスペクター" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                            <TextBlock Text="選択したタスクをここで編集します" FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" Margin="0,2,0,0"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Border Width="6" Height="20" CornerRadius="3" Background="{DynamicResource AppAccentBrush}" Margin="0,0,9,0"/>
+                                <TextBlock Text="インスペクター" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                            </StackPanel>
+                            <TextBlock Text="選択中のタスクを編集" FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" Margin="15,3,0,0"/>
                         </StackPanel>
                     </Border>
 
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="16,14,16,20">
+                            <!-- Empty inspector state also provides a compact project overview. -->
+                            <Border Background="{DynamicResource AppSurfaceAltBrush}"
+                                    BorderBrush="{DynamicResource AppBorderSoftBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="9"
+                                    Padding="12"
+                                    Margin="0,0,0,10">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedItem}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <StackPanel>
+                                    <TextBlock Text="プロジェクト概要" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                                    <Grid Margin="0,10,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="タスク" FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"/>
+                                            <TextBlock Text="{Binding Items.Count}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="レーン" FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"/>
+                                            <TextBlock Text="{Binding Lanes.Count}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="期間" FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"/>
+                                            <TextBlock Text="{Binding ProjectDuration, Converter={StaticResource HmsConv}}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource AppAccentBrush}" Margin="0,5,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
                             <!-- First-use path: the empty state is an action, not an explanation. -->
                             <Border Background="{DynamicResource AppAccentSubtleBrush}"
                                     BorderBrush="{DynamicResource AppAccentOutlineBrush}"
