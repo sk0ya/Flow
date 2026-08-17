@@ -428,7 +428,8 @@ public partial class GanttCanvas : UserControl
         }
 
         // left-margin(8) + text + right-margin(8)
-        return Math.Clamp(maxTextW + 16, 80, 500);
+        // Leave room for the task-count badge so lane names do not collapse into the ruler.
+        return Math.Clamp(maxTextW + 54, 112, 500);
     }
 
     private void AttachWindowHook()
@@ -518,6 +519,24 @@ public partial class GanttCanvas : UserControl
 
         // 1. Background
         Add(Rect(totalW, totalH, surface), 0, 0);
+
+        // Alternating rows make it possible to follow a lane across a wide plan.
+        for (int i = 0; i < nLanes; i++)
+        {
+            if (i % 2 == 0) continue;
+
+            Add(new Rectangle
+            {
+                Width = totalW,
+                Height = LaneH,
+                Fill = new SolidColorBrush(Color.FromArgb(
+                    palette.IsDark ? (byte)16 : (byte)22,
+                    ((SolidColorBrush)palette.TextPrimary).Color.R,
+                    ((SolidColorBrush)palette.TextPrimary).Color.G,
+                    ((SolidColorBrush)palette.TextPrimary).Color.B)),
+                IsHitTestVisible = false,
+            }, 0, i * LaneH);
+        }
 
         // 2. Reorder source highlight
         for (int i = 0; i < nLanes; i++)
@@ -822,6 +841,7 @@ public partial class GanttCanvas : UserControl
 
         var lanes = Lanes?.ToList() ?? new List<LaneViewModel>();
         if (lanes.Count == 0) lanes.Add(new LaneViewModel("レーン 1"));
+        var items = ItemsSource?.ToList() ?? new List<ItemViewModel>();
 
         double offset = TimelineScrollViewer.VerticalOffset;
 
@@ -838,18 +858,58 @@ public partial class GanttCanvas : UserControl
             if (rowY + LaneH < 0 || rowY > viewportH) continue;
 
             bool isReorderSource = _drag == DragMode.LaneReorder && _reorderSourceLane == i;
+            bool isCursorLane = i == CursorLaneIndex && _drag == DragMode.None;
+            int itemCount = items.Count(item => item.LaneId == lanes[i].Id);
 
-            AddTo(FrozenLaneCanvas, new TextBlock
+            if (i % 2 == 1)
+            {
+                AddTo(FrozenLaneCanvas, new Rectangle
+                {
+                    Width = LaneHeaderW,
+                    Height = LaneH,
+                    Fill = new SolidColorBrush(Color.FromArgb(
+                        palette.IsDark ? (byte)16 : (byte)22,
+                        ((SolidColorBrush)palette.TextPrimary).Color.R,
+                        ((SolidColorBrush)palette.TextPrimary).Color.G,
+                        ((SolidColorBrush)palette.TextPrimary).Color.B)),
+                    IsHitTestVisible = false,
+                }, 0, rowY);
+            }
+
+            var laneContent = new StackPanel
+            {
+                Width = LaneHeaderW - 16,
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center,
+                Opacity = isReorderSource ? 0.25 : 1.0,
+            };
+            laneContent.Children.Add(new TextBlock
             {
                 Text = lanes[i].Name,
                 FontSize = 12,
-                FontWeight = FontWeights.Normal,
+                FontWeight = isCursorLane ? FontWeights.SemiBold : FontWeights.Normal,
                 Foreground = palette.TextPrimary,
-                Opacity = isReorderSource ? 0.25 : 1.0,
-                Width = LaneHeaderW - 16,
-                TextAlignment = TextAlignment.Right,
                 TextTrimming = TextTrimming.CharacterEllipsis,
-            }, 8, rowY + (LaneH - 15) / 2);
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            if (itemCount > 0)
+            {
+                laneContent.Children.Add(new Border
+                {
+                    Background = isCursorLane ? palette.AccentSubtleStrong : palette.SurfaceMuted,
+                    CornerRadius = new CornerRadius(7),
+                    Padding = new Thickness(5, 1, 5, 1),
+                    Margin = new Thickness(6, 0, 0, 0),
+                    Child = new TextBlock
+                    {
+                        Text = $"{itemCount}件",
+                        FontSize = 9,
+                        Foreground = isCursorLane ? palette.Accent : palette.TextMuted,
+                        VerticalAlignment = VerticalAlignment.Center,
+                    },
+                });
+            }
+            AddTo(FrozenLaneCanvas, laneContent, 8, rowY + (LaneH - 18) / 2);
 
             if (isReorderSource)
             {

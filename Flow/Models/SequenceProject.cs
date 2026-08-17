@@ -6,6 +6,7 @@ namespace Flow.Models;
 public class SequenceProject
 {
     public string Name { get; set; } = "新しいプロジェクト";
+    public ProjectKind ProjectKind { get; set; } = ProjectKind.General;
     public string TimeUnit { get; set; } = "日";
     public double CellDuration { get; set; } = 1.0;
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

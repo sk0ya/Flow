@@ -11,18 +11,21 @@
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <Border x:Name="FrozenCornerHeader"
+            <Border x:Name="FrozenCornerHeader"
                 Grid.Row="0"
                 Grid.Column="0"
                 Background="{DynamicResource AppSurfaceMutedBrush}"
                 BorderBrush="{DynamicResource AppBorderStrongBrush}"
                 BorderThickness="0,0,0,1">
-            <TextBlock Text="タスク"
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock Text="レーン"
                        FontSize="11"
                        FontWeight="SemiBold"
-                       Foreground="{DynamicResource AppTextSecondaryBrush}"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"/>
+                       Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                <TextBlock Text=" / タスク"
+                           FontSize="10"
+                           Foreground="{DynamicResource AppTextMutedBrush}"/>
+            </StackPanel>
         </Border>
 
         <Canvas x:Name="FrozenTimeHeaderCanvas"

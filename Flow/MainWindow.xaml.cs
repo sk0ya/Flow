@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using Microsoft.Win32;
 using Flow.ViewModels;
@@ -15,7 +14,6 @@ public partial class MainWindow : Window
     private TextBox? _activeCondBox;
     private bool     _isPre;
     private bool     _suppressPopup;
-    private double   _savedSidebarWidth = 270.0;
     private (LaneViewModel lane, int index)? _pendingLaneCreatedDuringMove;
     private readonly bool _skipCloseConfirmation;
 
@@ -87,11 +85,6 @@ public partial class MainWindow : Window
             _vim.HandleItemRenamed(item, oldName, newName);
         };
 
-        vm.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(MainViewModel.IsSidebarOpen))
-                UpdateSidebarColumns(vm);
-        };
         vm.ExportPngRequested += (_, _) => ExportPng();
         vm.ProjectLoaded        += (_, _) => GanttView.RequestAutoFitLaneHeader();
         vm.StartRenameRequested += (_, _) => GanttView.StartRenameSelectedItem(discardOnCancel: true);
@@ -103,58 +96,6 @@ public partial class MainWindow : Window
             if (!vm.CanCloseWindow())
                 e.Cancel = true;
         };
-    }
-
-    private void UpdateSidebarColumns(MainViewModel vm)
-    {
-        var sidebarCol  = MainContentGrid.ColumnDefinitions[1];
-        var splitterCol = MainContentGrid.ColumnDefinitions[2];
-
-        if (vm.IsSidebarOpen)
-        {
-            // Restore MinWidth before setting Width to avoid Min > Max conflict
-            sidebarCol.MinWidth = 160;
-            sidebarCol.Width    = new GridLength(Math.Clamp(_savedSidebarWidth, 160, 400));
-            splitterCol.Width   = new GridLength(5);
-        }
-        else
-        {
-            // Capture current pixel width; Width.Value is reliable after layout
-            double w = sidebarCol.Width.IsAbsolute
-                ? sidebarCol.Width.Value
-                : sidebarCol.ActualWidth;
-            if (w >= 160)
-                _savedSidebarWidth = w;
-
-            sidebarCol.MinWidth = 0;
-            sidebarCol.Width    = new GridLength(0);
-            splitterCol.Width   = new GridLength(0);
-        }
-    }
-
-    private void OnSidebarSplitterDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
-    {
-        // Keep _savedSidebarWidth in sync whenever the user resizes the sidebar
-        var col = MainContentGrid.ColumnDefinitions[1];
-        if (col.ActualWidth >= 160)
-            _savedSidebarWidth = col.ActualWidth;
-    }
-
-    private void OnActivityBarClick(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is not MainViewModel vm || sender is not RadioButton rb) return;
-
-        var panel = rb.Tag?.ToString() switch
-        {
-            "ProjectList"     => SidebarPanel.ProjectList,
-            "ProjectSettings" => SidebarPanel.ProjectSettings,
-            "CanvasTools"     => SidebarPanel.CanvasTools,
-            "TaskEditor"      => SidebarPanel.TaskEditor,
-            "AppSettings"     => SidebarPanel.AppSettings,
-            _                 => SidebarPanel.ProjectList,
-        };
-
-        vm.ToggleOrActivatePanel(panel);
     }
 
     private void OnMinimizeWindow(object sender, RoutedEventArgs e) =>
@@ -172,6 +113,24 @@ public partial class MainWindow : Window
     }
 
     private void OnCloseWindow(object sender, RoutedEventArgs e) => Close();
+
+    private void OnAppearanceClick(object sender, RoutedEventArgs e) =>
+        AppearancePopup.IsOpen = !AppearancePopup.IsOpen;
+
+    private void OnTimelineScaleClick(object sender, RoutedEventArgs e) =>
+        TimelineScalePopup.IsOpen = !TimelineScalePopup.IsOpen;
+
+    private void OnProjectSettingsClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        var dialog = new ProjectSettingsWindow(vm)
+        {
+            Owner = this
+        };
+        dialog.ShowDialog();
+    }
 
     private static List<IUndoableCommand> BuildTimelineCommands(IReadOnlyList<TimelineEditChange> changes) =>
         TimelineEditCommandFactory.Create(changes);

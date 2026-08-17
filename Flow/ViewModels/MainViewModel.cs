@@ -16,6 +16,13 @@ using Microsoft.Win32;
 namespace Flow.ViewModels;
 
 public record SuggestionItem(string Value, string Source);
+public record ProjectKindOption(ProjectKind Kind, string Name, string Description);
+internal sealed record ProjectPreset(
+    string TimeUnit,
+    double CellDuration,
+    double TotalDuration,
+    IReadOnlyList<string> Categories,
+    IReadOnlyList<string> Lanes);
 
 public enum SidebarPanel { ProjectList, ProjectSettings, CanvasTools, TaskEditor, AppSettings }
 
@@ -33,6 +40,7 @@ public partial class MainViewModel : ObservableObject
     private bool _suspendAutoSave;
     private bool _initializingAppearance;
     private bool _isLoadingProject;
+    private bool _syncingProjectOptions;
 
     private static readonly ThemeOption[] AvailableThemeOptions =
     {
@@ -50,6 +58,16 @@ public partial class MainViewModel : ObservableObject
         new("バイオレット", "#8B5CF6"),
     };
 
+    private static readonly ProjectKindOption[] AvailableProjectKindOptions =
+    {
+        new(ProjectKind.General, "汎用", "レーンと分類を自由に決めて計画します"),
+        new(ProjectKind.SoftwareDevelopment, "ソフトウェア開発", "開発向けの初期レーンとタスク分類を作成します"),
+        new(ProjectKind.CreativeProduction, "制作進行", "制作向けの初期レーンとタスク分類を作成します"),
+        new(ProjectKind.EventPlanning, "イベント準備", "イベント準備向けの初期レーンとタスク分類を作成します"),
+        new(ProjectKind.ResearchStudy, "研究・学習", "研究や学習計画向けの初期レーンとタスク分類を作成します"),
+        new(ProjectKind.Manufacturing, "工程管理", "工程管理向けの初期レーンとタスク分類を作成します"),
+    };
+
     [ObservableProperty] private int    _cursorLaneIndex = 0;
     [ObservableProperty] private double _cursorTime      = 0.0;
     [ObservableProperty] private bool   _isVisualMode      = false;
@@ -62,6 +80,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _vimPromptText     = "";
 
     [ObservableProperty] private string         _projectName = "新しいプロジェクト";
+    [ObservableProperty] private ProjectKind    _projectKind = ProjectKind.General;
+    [ObservableProperty] private ProjectKindOption? _selectedProjectKindOption;
     [ObservableProperty] private string?        _currentFilePath;
     [ObservableProperty] private RecentProjectEntry? _selectedRecentProject;
     [ObservableProperty] private ItemViewModel? _selectedItem;
@@ -106,6 +126,7 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<RecentProjectEntry> RecentProjects  { get; } = new();
     public ObservableCollection<ThemeOption> ThemeOptions { get; } = new();
     public ObservableCollection<AccentColorOption> AccentColorOptions { get; } = new();
+    public ObservableCollection<ProjectKindOption> ProjectKindOptions { get; } = new();
 
     public IEnumerable<CategoryViewModel> CategoriesForPicker =>
         Enumerable.Repeat(CategoryViewModel.None, 1).Concat(Categories);
@@ -115,6 +136,7 @@ public partial class MainViewModel : ObservableObject
     public static readonly string[] TimeUnitOptions = { "秒", "分", "時間", "日", "週", "スプリント" };
 
     public bool HasRecentProjects => RecentProjects.Count > 0;
+    public bool HasItems => Items.Count > 0;
     public bool HasActiveFilters => ShowErrorsOnly
                                  || SelectedFilterCategory is { IsNone: false };
     public double ZoomScale => Math.Clamp(ZoomPercent / 100.0, 0.3, 4.0);
@@ -122,6 +144,17 @@ public partial class MainViewModel : ObservableObject
     public bool CanZoomIn => ZoomPercent < 300;
     public bool CanZoomOut => ZoomPercent > 40;
     public bool HasStatusMessage => !string.IsNullOrWhiteSpace(StatusMessage);
+    public string ProjectProfileSummary => SelectedProjectKindOption?.Name ?? "汎用";
+    public string ProjectPresetImpactSummary
+    {
+        get
+        {
+            var preset = GetPreset(ProjectKind);
+            string categories = preset.Categories.Count == 0 ? "分類は変更なし" : $"分類 {preset.Categories.Count}件";
+            string lanes = preset.Lanes.Count == 0 ? "レーンは変更なし" : $"レーン {preset.Lanes.Count}本";
+            return $"{lanes}、{categories}、{preset.TimeUnit}単位、全体期間 {FormatNumber(preset.TotalDuration)} {preset.TimeUnit}";
+        }
+    }
     public int CursorLaneNumber => CursorLaneIndex + 1;
     public string SaveStateLabel => CurrentFilePath == null
         ? (IsDirty ? "未保存のドラフトあり" : "未保存")
@@ -236,6 +269,7 @@ public partial class MainViewModel : ObservableObject
         _cellDurationTimer.Tick += OnCellDurationTimerTick;
         _cellDurationText = FormatNumber(ConvertCellDurationToDisplay(_cellDuration));
 
+        InitializeProjectOptions();
         InitializeAppearance();
 
         Categories.CollectionChanged += OnCategoriesCollectionChanged;
@@ -251,6 +285,28 @@ public partial class MainViewModel : ObservableObject
         RefreshFilteredView();
         UpdateStatusMessage();
     }
+
+    private void InitializeProjectOptions()
+    {
+        foreach (var option in AvailableProjectKindOptions)
+            ProjectKindOptions.Add(option);
+
+        SyncSelectedProjectOptions();
+    }
+
+    private void SyncSelectedProjectOptions()
+    {
+        _syncingProjectOptions = true;
+        SelectedProjectKindOption = ProjectKindOptions.FirstOrDefault(option => option.Kind == ProjectKind)
+            ?? ProjectKindOptions.First();
+        _syncingProjectOptions = false;
+        NotifyProjectSettingSummaries();
+    }
+
+    private void NotifyProjectSettingSummaries() =>
+        NotifyProperties(
+            nameof(ProjectProfileSummary),
+            nameof(ProjectPresetImpactSummary));
 
     private void InitializeAppearance()
     {
@@ -313,6 +369,141 @@ public partial class MainViewModel : ObservableObject
 
     private void NotifyCategoryViewsChanged() =>
         NotifyProperties(nameof(CategoriesForPicker), nameof(CategoriesForFilter));
+
+    // ── Project preset commands ──────────────────────────────────────────
+
+    [RelayCommand]
+    private void ApplyProjectPreset()
+    {
+        var preset = GetPreset(ProjectKind);
+
+        TimeUnit = preset.TimeUnit;
+        CellDuration = preset.CellDuration;
+        TotalDuration = preset.TotalDuration;
+        SyncSelectedProjectOptions();
+
+        ApplyPresetCategories(preset.Categories);
+        ApplyPresetLanes(preset.Lanes);
+
+        Analyze();
+        RequestAutoSave();
+        StatusMessage = $"「{SelectedProjectKindOption?.Name ?? "プリセット"}」の設定を適用しました";
+    }
+
+    private void ApplyPresetCategories(IReadOnlyList<string> categoryNames)
+    {
+        if (Items.Count == 0)
+        {
+            Categories.Clear();
+            foreach (var name in categoryNames)
+            {
+                var category = new CategoryViewModel(Guid.NewGuid(), name, NextCategoryColor());
+                Subscribe(category);
+                Categories.Add(category);
+            }
+
+            NotifyCategoryViewsChanged();
+            return;
+        }
+
+        foreach (var name in categoryNames)
+        {
+            if (Categories.Any(category => string.Equals(category.Name, name, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            var category = new CategoryViewModel(Guid.NewGuid(), name, NextCategoryColor());
+            Subscribe(category);
+            Categories.Add(category);
+        }
+
+        var presetCategoryNames = categoryNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var usedCategoryIds = Items
+            .Where(item => item.CategoryId != Guid.Empty)
+            .Select(item => item.CategoryId)
+            .ToHashSet();
+
+        foreach (var category in Categories
+                     .Where(category => !presetCategoryNames.Contains(category.Name)
+                                     && !usedCategoryIds.Contains(category.Id))
+                     .ToList())
+        {
+            Categories.Remove(category);
+        }
+
+        NotifyCategoryViewsChanged();
+    }
+
+    private void ApplyPresetLanes(IReadOnlyList<string> laneNames)
+    {
+        if (laneNames.Count == 0)
+            return;
+
+        if (Items.Count == 0)
+        {
+            Lanes.Clear();
+            foreach (var name in laneNames)
+                Lanes.Add(new LaneViewModel(name));
+            return;
+        }
+
+        foreach (var name in laneNames)
+        {
+            if (!Lanes.Any(lane => string.Equals(lane.Name, name, StringComparison.OrdinalIgnoreCase)))
+                Lanes.Add(new LaneViewModel(name));
+        }
+
+        var presetLaneNames = laneNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var usedLaneIds = Items.Select(item => item.LaneId).ToHashSet();
+
+        foreach (var lane in Lanes
+                     .Where(lane => !presetLaneNames.Contains(lane.Name)
+                                 && !usedLaneIds.Contains(lane.Id)
+                                 && Lanes.Count > 1)
+                     .ToList())
+        {
+            Lanes.Remove(lane);
+        }
+    }
+
+    private static ProjectPreset GetPreset(ProjectKind kind) => kind switch
+    {
+        ProjectKind.SoftwareDevelopment => new(
+            "日",
+            0.5,
+            20,
+            ["要件", "実装", "レビュー", "テスト", "リリース"],
+            ["プロダクト", "デザイン", "フロントエンド", "バックエンド", "QA"]),
+        ProjectKind.CreativeProduction => new(
+            "日",
+            0.5,
+            30,
+            ["企画", "素材", "制作", "確認", "修正", "納品"],
+            ["ディレクター", "デザイナー", "編集", "確認者"]),
+        ProjectKind.EventPlanning => new(
+            "日",
+            1,
+            60,
+            ["手配", "制作", "確認", "リハーサル", "当日対応"],
+            ["会場", "受付", "ステージ", "配信", "控室"]),
+        ProjectKind.ResearchStudy => new(
+            "週",
+            0.5,
+            12,
+            ["文献", "データ", "実験", "執筆", "発表"],
+            ["探索", "検証", "整理", "発表準備"]),
+        ProjectKind.Manufacturing => new(
+            "時間",
+            1,
+            40,
+            ["準備", "加工", "組立", "検査", "出荷"],
+            ["ラインA", "ラインB", "検査設備", "出荷場"]),
+        _ => new(
+            "日",
+            1,
+            10,
+            [],
+            ["レーン 1"]),
+    };
 
     // ── Category commands ─────────────────────────────────────────────────
 
@@ -662,6 +853,8 @@ public partial class MainViewModel : ObservableObject
             Categories.Clear();
             Lanes.Add(new LaneViewModel("レーン 1"));
             ProjectName     = "新しいプロジェクト";
+            ProjectKind     = ProjectKind.General;
+            SyncSelectedProjectOptions();
             TimeUnit        = "日";
             CellDuration    = 1.0;
             TotalDuration   = 10.0;
@@ -878,6 +1071,8 @@ public partial class MainViewModel : ObservableObject
                 ProjectName = string.IsNullOrWhiteSpace(project.Name)
                     ? (filePath != null ? Path.GetFileNameWithoutExtension(filePath) : "復元されたドラフト")
                     : project.Name;
+                ProjectKind = project.ProjectKind;
+                SyncSelectedProjectOptions();
                 TimeUnit = project.TimeUnit;
                 CellDuration = project.CellDuration > 0
                     ? project.CellDuration
@@ -1091,6 +1286,7 @@ public partial class MainViewModel : ObservableObject
 
     private void OnItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        OnPropertyChanged(nameof(HasItems));
         Analyze();
         RequestAutoSave();
         RefreshFilteredView();
@@ -1424,6 +1620,22 @@ public partial class MainViewModel : ObservableObject
         RequestAutoSave();
     }
 
+    partial void OnSelectedProjectKindOptionChanged(ProjectKindOption? value)
+    {
+        if (value == null || _syncingProjectOptions) return;
+        ProjectKind = value.Kind;
+        NotifyProjectSettingSummaries();
+        RequestAutoSave();
+    }
+
+    partial void OnProjectKindChanged(ProjectKind value)
+    {
+        if (!_syncingProjectOptions)
+            SyncSelectedProjectOptions();
+        NotifyProjectSettingSummaries();
+        RequestAutoSave();
+    }
+
     partial void OnCellDurationChanged(double value)
     {
         double normalized = NormalizeCellDuration(value);
@@ -1637,6 +1849,7 @@ public partial class MainViewModel : ObservableObject
     private SequenceProject CaptureProject() => new()
     {
         Name = ProjectName,
+        ProjectKind = ProjectKind,
         TimeUnit = TimeUnit,
         CellDuration = CellDuration,
         TotalDuration = TotalDuration,

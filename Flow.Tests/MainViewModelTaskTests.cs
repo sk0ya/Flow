@@ -9,6 +9,69 @@ namespace Flow.Tests;
 public sealed class MainViewModelTaskTests
 {
     [Fact]
+    public void ApplyProjectPreset_WhenSoftwareDevelopmentSelected_AddsPlanningDefaults()
+    {
+        TestEnvironment.RunInWpfContext(() =>
+        {
+            var viewModel = TestEnvironment.CreateMainViewModel();
+            viewModel.SelectedProjectKindOption = viewModel.ProjectKindOptions
+                .Single(option => option.Kind == ProjectKind.SoftwareDevelopment);
+
+            viewModel.ApplyProjectPresetCommand.Execute(null);
+
+            Assert.Equal(ProjectKind.SoftwareDevelopment, viewModel.ProjectKind);
+            Assert.Equal("日", viewModel.TimeUnit);
+            Assert.Equal(0.5, viewModel.CellDuration);
+            Assert.Contains(viewModel.Categories, category => category.Name == "実装");
+            Assert.Contains(viewModel.Lanes, lane => lane.Name == "バックエンド");
+        });
+    }
+
+    [Fact]
+    public void ApplyProjectPreset_WhenEmptyProjectSwitchesPreset_ReplacesPresetLanesAndCategories()
+    {
+        TestEnvironment.RunInWpfContext(() =>
+        {
+            var viewModel = TestEnvironment.CreateMainViewModel();
+            viewModel.SelectedProjectKindOption = viewModel.ProjectKindOptions
+                .Single(option => option.Kind == ProjectKind.SoftwareDevelopment);
+            viewModel.ApplyProjectPresetCommand.Execute(null);
+
+            viewModel.SelectedProjectKindOption = viewModel.ProjectKindOptions
+                .Single(option => option.Kind == ProjectKind.EventPlanning);
+            viewModel.ApplyProjectPresetCommand.Execute(null);
+
+            Assert.DoesNotContain(viewModel.Lanes, lane => lane.Name == "バックエンド");
+            Assert.DoesNotContain(viewModel.Categories, category => category.Name == "実装");
+            Assert.Contains(viewModel.Lanes, lane => lane.Name == "ステージ");
+            Assert.Contains(viewModel.Categories, category => category.Name == "手配");
+        });
+    }
+
+    [Fact]
+    public void ApplyProjectPreset_WhenProjectHasTasks_RemovesUnusedPresetLanesAndKeepsUsedLanes()
+    {
+        TestEnvironment.RunInWpfContext(() =>
+        {
+            var viewModel = TestEnvironment.CreateMainViewModel();
+            viewModel.SelectedProjectKindOption = viewModel.ProjectKindOptions
+                .Single(option => option.Kind == ProjectKind.SoftwareDevelopment);
+            viewModel.ApplyProjectPresetCommand.Execute(null);
+
+            var usedLane = viewModel.Lanes.Single(lane => lane.Name == "バックエンド");
+            viewModel.PasteItem(new SequenceItem { Name = "API", Duration = 1 }, usedLane.Id, startTime: 0);
+
+            viewModel.SelectedProjectKindOption = viewModel.ProjectKindOptions
+                .Single(option => option.Kind == ProjectKind.EventPlanning);
+            viewModel.ApplyProjectPresetCommand.Execute(null);
+
+            Assert.Contains(viewModel.Lanes, lane => lane.Id == usedLane.Id);
+            Assert.DoesNotContain(viewModel.Lanes, lane => lane.Name == "フロントエンド");
+            Assert.Contains(viewModel.Lanes, lane => lane.Name == "ステージ");
+        });
+    }
+
+    [Fact]
     public void AddNewItemAt_WhenRequestedStartOverlaps_MovesTaskToNextAvailableSlot()
     {
         TestEnvironment.RunInWpfContext(() =>
