@@ -10,8 +10,8 @@ Use the .NET CLI from the repository root:
 
 - `dotnet restore Flow.sln` restores NuGet packages.
 - `dotnet build Flow.sln` builds the .NET 9 WPF app.
-- `dotnet run --project Flow/Flow.csproj` builds and launches in one step.
-- `Start-Process .\Flow\bin\Debug\net9.0-windows\Flow.exe` relaunches the latest build without rebuilding.
+- `dotnet run --project Flow.App/Flow.App.csproj` builds and launches in one step.
+- `Start-Process .\Flow.App\bin\Debug\net9.0-windows\Flow.App.exe` relaunches the latest build without rebuilding.
 
 Close any running `Flow.exe` before rebuilding; the output binary is locked while the app is open.
 

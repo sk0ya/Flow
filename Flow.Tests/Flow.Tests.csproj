@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Flow\Flow.csproj" />
+    <ProjectReference Include="..\Flow.App\Flow.App.csproj" />
   </ItemGroup>
 
 </Project>

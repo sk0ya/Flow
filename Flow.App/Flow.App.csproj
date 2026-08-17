@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon>..\Flow\Assets\Flow.ico</ApplicationIcon>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Flow\Flow.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ApplicationDefinition Include="..\Flow\App.xaml" Link="App.xaml" />
+    <Compile Include="..\Flow\App.xaml.cs" Link="App.xaml.cs" />
+    <Resource Include="..\Flow\Assets\Flow.ico" Link="Assets\Flow.ico" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,188 @@
+<UserControl x:Class="Flow.Views.Controls.FlowWorkspaceControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Flow.Views.Controls"
+             xmlns:vm="clr-namespace:Flow.ViewModels"
+             FontFamily="Segoe UI">
+    <UserControl.Resources>
+        <!-- The control is self-contained so a host does not need to copy App.xaml. -->
+        <SolidColorBrush x:Key="AppWindowBackgroundBrush" Color="#F6F8FC"/>
+        <SolidColorBrush x:Key="AppSurfaceBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="AppSurfaceAltBrush" Color="#F8FAFD"/>
+        <SolidColorBrush x:Key="AppSurfaceMutedBrush" Color="#EEF2F7"/>
+        <SolidColorBrush x:Key="AppBorderBrush" Color="#D7DEE9"/>
+        <SolidColorBrush x:Key="AppBorderSoftBrush" Color="#E8EDF4"/>
+        <SolidColorBrush x:Key="AppBorderStrongBrush" Color="#BAC6D6"/>
+        <SolidColorBrush x:Key="AppTextPrimaryBrush" Color="#1F2937"/>
+        <SolidColorBrush x:Key="AppTextSecondaryBrush" Color="#526174"/>
+        <SolidColorBrush x:Key="AppTextMutedBrush" Color="#7B8798"/>
+        <SolidColorBrush x:Key="AppAccentBrush" Color="#4285F4"/>
+        <SolidColorBrush x:Key="AppAccentStrongBrush" Color="#2563C7"/>
+        <SolidColorBrush x:Key="AppAccentOutlineBrush" Color="#A9C7FA"/>
+        <SolidColorBrush x:Key="AppAccentSubtleBrush" Color="#EAF2FF"/>
+        <SolidColorBrush x:Key="AppAccentSubtleStrongBrush" Color="#D7E7FF"/>
+        <SolidColorBrush x:Key="AppAccentTextBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="AppInfoBrush" Color="#2563EB"/>
+        <SolidColorBrush x:Key="AppInfoSurfaceBrush" Color="#EAF2FF"/>
+        <SolidColorBrush x:Key="AppSuccessBrush" Color="#16804A"/>
+        <SolidColorBrush x:Key="AppSuccessSurfaceBrush" Color="#E7F7EE"/>
+        <SolidColorBrush x:Key="AppDangerBrush" Color="#C53030"/>
+        <SolidColorBrush x:Key="AppWarningSurfaceBrush" Color="#FFF7E6"/>
+        <SolidColorBrush x:Key="AppWarningBorderBrush" Color="#F0C36A"/>
+        <SolidColorBrush x:Key="AppWarningTextBrush" Color="#8A5A00"/>
+
+        <Style x:Key="WorkspaceButton" TargetType="Button">
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style x:Key="WorkspaceInput" TargetType="TextBox">
+            <Setter Property="Padding" Value="7,5"/>
+            <Setter Property="Margin" Value="0,3,0,7"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style x:Key="WorkspaceLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppTextSecondaryBrush}"/>
+            <Setter Property="Margin" Value="0,7,0,1"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Background="{DynamicResource AppWindowBackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="42"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="30"/>
+        </Grid.RowDefinitions>
+
+        <!-- Hostable toolbar: this is content, not a window/title bar. -->
+        <Border Grid.Row="0"
+                Background="{DynamicResource AppSurfaceBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="14,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ProjectName}"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource AppTextPrimaryBrush}"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding CurrentFilePath, TargetNullValue=未保存のプロジェクト}"
+                               FontSize="9"
+                               Foreground="{DynamicResource AppTextMutedBrush}"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding CurrentFilePath}"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="保存" Style="{StaticResource WorkspaceButton}" Command="{Binding SaveProjectCommand}"/>
+                    <Button Content="元に戻す" Style="{StaticResource WorkspaceButton}" Command="{Binding UndoLastActionCommand}"/>
+                    <Button Content="やり直す" Style="{StaticResource WorkspaceButton}" Command="{Binding RedoLastActionCommand}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="360"/>
+                <ColumnDefinition Width="340" MinWidth="260"/>
+            </Grid.ColumnDefinitions>
+
+            <controls:GanttCanvas x:Name="GanttView"
+                                  Grid.Column="0"
+                                  ItemsSource="{Binding FilteredItems}"
+                                  Edges="{Binding FilteredDependencyEdges}"
+                                  SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                                  Lanes="{Binding Lanes}"
+                                  Categories="{Binding Categories}"
+                                  TimeUnit="{Binding TimeUnit}"
+                                  TotalDuration="{Binding TotalDuration}"
+                                  CellDuration="{Binding CellDuration}"
+                                  PixelsPerUnit="{Binding PixelsPerUnit}"
+                                  CursorLaneIndex="{Binding CursorLaneIndex, Mode=TwoWay}"
+                                  CursorTime="{Binding CursorTime, Mode=TwoWay}"
+                                  IsVisualMode="{Binding IsVisualMode}"
+                                  IsVisualLineMode="{Binding IsVisualLineMode}"
+                                  VisualAnchorLane="{Binding VisualAnchorLane}"
+                                  VisualAnchorTime="{Binding VisualAnchorTime}"
+                                  CriticalPathItemIds="{Binding CriticalPathItemIds}"
+                                  SearchText="{Binding SearchHighlightText}"/>
+
+            <Border Grid.Column="1"
+                    Background="{DynamicResource AppSurfaceBrush}"
+                    BorderBrush="{DynamicResource AppBorderBrush}"
+                    BorderThickness="1,0,0,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,12">
+                    <Grid DataContext="{Binding SelectedItem}">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="インスペクター" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                <Button Grid.Column="1" Content="削除" Style="{StaticResource WorkspaceButton}" Foreground="{DynamicResource AppDangerBrush}"
+                                        Command="{Binding DataContext.DeleteItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"/>
+                            </Grid>
+                            <TextBlock Text="タスク名" Style="{StaticResource WorkspaceLabel}"/>
+                            <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource WorkspaceInput}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="開始" Style="{StaticResource WorkspaceLabel}"/>
+                                    <TextBox Text="{Binding StartTime, UpdateSourceTrigger=LostFocus}" Style="{StaticResource WorkspaceInput}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="所要時間" Style="{StaticResource WorkspaceLabel}"/>
+                                    <TextBox Text="{Binding Duration, UpdateSourceTrigger=LostFocus}" Style="{StaticResource WorkspaceInput}"/>
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="説明" Style="{StaticResource WorkspaceLabel}"/>
+                            <TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource WorkspaceInput}" MinHeight="64" AcceptsReturn="True" TextWrapping="Wrap"/>
+                            <TextBlock Text="前提条件" Style="{StaticResource WorkspaceLabel}"/>
+                            <ItemsControl ItemsSource="{Binding PreConditions}">
+                                <ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="•  {Binding Value}" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,2"/></DataTemplate></ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBox Text="{Binding NewPreCondition, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource WorkspaceInput}" ToolTip="前提条件を入力してEnter">
+                                <TextBox.InputBindings><KeyBinding Key="Return" Command="{Binding AddPreConditionCommand}"/></TextBox.InputBindings>
+                            </TextBox>
+                            <TextBlock Text="完了条件" Style="{StaticResource WorkspaceLabel}"/>
+                            <ItemsControl ItemsSource="{Binding PostConditions}">
+                                <ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="•  {Binding Value}" Foreground="{DynamicResource AppSuccessBrush}" Margin="0,2"/></DataTemplate></ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBox Text="{Binding NewPostCondition, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource WorkspaceInput}" ToolTip="完了条件を入力してEnter">
+                                <TextBox.InputBindings><KeyBinding Key="Return" Command="{Binding AddPostConditionCommand}"/></TextBox.InputBindings>
+                            </TextBox>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+            </Border>
+
+            <Border Grid.Column="1" Background="{DynamicResource AppSurfaceAltBrush}" Padding="18" Visibility="Collapsed">
+                <TextBlock Text="タイムラインからタスクを選択すると、ここにインスペクターが表示されます。" TextWrapping="Wrap" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="2" Background="{DynamicResource AppSurfaceBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="12,0">
+            <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource AppTextSecondaryBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+        </Border>
+    </Grid>
+</UserControl>

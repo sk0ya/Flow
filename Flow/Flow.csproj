@@ -1,12 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
+    <OutputType>Library</OutputType>
     <TargetFramework>net9.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <ApplicationIcon>Assets\Flow.ico</ApplicationIcon>
+    <IsPackable>true</IsPackable>
+    <PackageId>Flow.Editor</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Flow contributors</Authors>
+    <Description>Embeddable WPF timeline editor and .flow project library.</Description>
+    <PackageTags>wpf;timeline;gantt;project-management;flow</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,7 +20,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ApplicationDefinition Remove="App.xaml" />
+    <Compile Remove="App.xaml.cs" />
     <Resource Include="Assets\Flow.ico" />
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>
