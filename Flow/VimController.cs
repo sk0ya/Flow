@@ -20,6 +20,8 @@ public sealed class VimController
     private string _promptBuffer = "";
     private string _promptOriginalSearchText = "";
 
+    public bool IsEnabled { get; set; } = true;
+
     public event Action? QuitRequested;
 
     public VimController(MainViewModel viewModel, GanttCanvas ganttView)
@@ -34,6 +36,9 @@ public sealed class VimController
 
     public bool HandleKey(Key key, ModifierKeys modifiers)
     {
+        if (!IsEnabled)
+            return false;
+
         if (HandlePromptKey(key))
             return true;
 
@@ -59,10 +64,13 @@ public sealed class VimController
     }
 
     public bool TryExitMode()
-        => _engine.TryExitToNormalMode();
+        => IsEnabled && _engine.TryExitToNormalMode();
 
     public bool TryCancelPendingInput()
     {
+        if (!IsEnabled)
+            return false;
+
         if (_promptKind != VimPromptKind.None)
         {
             ExitPrompt();
@@ -74,6 +82,9 @@ public sealed class VimController
 
     public bool TryClearSearchHighlight()
     {
+        if (!IsEnabled)
+            return false;
+
         if (string.IsNullOrWhiteSpace(_viewModel.SearchHighlightText))
             return false;
 
@@ -83,6 +94,9 @@ public sealed class VimController
 
     public bool HandleTextInput(string text)
     {
+        if (!IsEnabled)
+            return false;
+
         if (string.IsNullOrEmpty(text))
             return false;
 

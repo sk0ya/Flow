@@ -9,4 +9,5 @@ public class AppState
     public List<string> RecentProjectPaths { get; set; } = new();
     public string ThemeKey { get; set; } = ThemeService.LightThemeKey;
     public string AccentColor { get; set; } = ThemeService.DefaultAccentColor;
+    public bool VimEnabled { get; set; } = true;
 }

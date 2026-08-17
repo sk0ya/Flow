@@ -8,7 +8,7 @@
     <UseWPF>true</UseWPF>
     <IsPackable>true</IsPackable>
     <PackageId>Flow.Editor</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.1.5</Version>
     <Authors>Flow contributors</Authors>
     <Description>Embeddable WPF timeline editor and .flow project library.</Description>
     <PackageTags>wpf;timeline;gantt;project-management;flow</PackageTags>

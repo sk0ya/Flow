@@ -37,4 +37,27 @@ public sealed class FlowProjectServiceTests
 
         Assert.Throws<ArgumentException>(() => service.Load("project.json"));
     }
+
+    [Fact]
+    public void Load_WhenFileIsEmpty_ReturnsNewProject()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "FlowTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+
+        try
+        {
+            var path = Path.Combine(directory, "empty.flow");
+            File.WriteAllText(path, "\r\n  \t");
+
+            var project = new FlowProjectService().Load(path);
+
+            Assert.Equal("新しいプロジェクト", project.Name);
+            Assert.Single(project.Lanes);
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
 }

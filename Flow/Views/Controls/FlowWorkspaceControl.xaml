@@ -3,16 +3,19 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:Flow.Views.Controls"
              xmlns:vm="clr-namespace:Flow.ViewModels"
+             xmlns:conv="clr-namespace:Flow.Converters"
+             PreviewKeyDown="OnPreviewKeyDown"
+             PreviewTextInput="OnPreviewTextInput"
              FontFamily="Segoe UI">
     <UserControl.Resources>
-        <!-- The control is self-contained so a host does not need to copy App.xaml. -->
+        <BooleanToVisibilityConverter x:Key="BoolVis"/>
+        <conv:HmsConverter x:Key="HmsConv"/>
+
         <SolidColorBrush x:Key="AppWindowBackgroundBrush" Color="#F6F8FC"/>
         <SolidColorBrush x:Key="AppSurfaceBrush" Color="#FFFFFF"/>
         <SolidColorBrush x:Key="AppSurfaceAltBrush" Color="#F8FAFD"/>
-        <SolidColorBrush x:Key="AppSurfaceMutedBrush" Color="#EEF2F7"/>
         <SolidColorBrush x:Key="AppBorderBrush" Color="#D7DEE9"/>
         <SolidColorBrush x:Key="AppBorderSoftBrush" Color="#E8EDF4"/>
-        <SolidColorBrush x:Key="AppBorderStrongBrush" Color="#BAC6D6"/>
         <SolidColorBrush x:Key="AppTextPrimaryBrush" Color="#1F2937"/>
         <SolidColorBrush x:Key="AppTextSecondaryBrush" Color="#526174"/>
         <SolidColorBrush x:Key="AppTextMutedBrush" Color="#7B8798"/>
@@ -31,158 +34,248 @@
         <SolidColorBrush x:Key="AppWarningBorderBrush" Color="#F0C36A"/>
         <SolidColorBrush x:Key="AppWarningTextBrush" Color="#8A5A00"/>
 
-        <Style x:Key="WorkspaceButton" TargetType="Button">
-            <Setter Property="Padding" Value="10,5"/>
+        <Style x:Key="ActionButton" TargetType="Button">
+            <Setter Property="Padding" Value="12,7"/>
             <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
             <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="7" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource AppAccentSubtleBrush}"/><Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{DynamicResource AppAccentOutlineBrush}"/></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource AppAccentSubtleStrongBrush}"/></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
-        <Style x:Key="WorkspaceInput" TargetType="TextBox">
-            <Setter Property="Padding" Value="7,5"/>
-            <Setter Property="Margin" Value="0,3,0,7"/>
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource ActionButton}">
+            <Setter Property="Background" Value="{DynamicResource AppAccentBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppAccentTextBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppAccentStrongBrush}"/>
+        </Style>
+        <Style x:Key="ToolbarButton" TargetType="Button" BasedOn="{StaticResource ActionButton}">
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Margin" Value="0,0,5,0"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+        <Style x:Key="InputBox" TargetType="TextBox">
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="FontSize" Value="12"/>
             <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource AppAccentBrush}"/>
             <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
         </Style>
-        <Style x:Key="WorkspaceLabel" TargetType="TextBlock">
+        <Style x:Key="InputComboBoxItem" TargetType="ComboBoxItem">
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="ItemBackground" Background="Transparent" Padding="{TemplateBinding Padding}" CornerRadius="6">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemBackground" Property="Background" Value="{DynamicResource AppAccentSubtleBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBackground" Property="Background" Value="{DynamicResource AppAccentSubtleStrongBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="InputComboBox" TargetType="ComboBox">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource InputComboBoxItem}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Border x:Name="ComboBorder"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="7"/>
+                            <Grid Margin="{TemplateBinding Padding}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Grid.Column="0"
+                                                  Content="{TemplateBinding SelectionBoxItem}"
+                                                  ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                  VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1"
+                                           Text="▼"
+                                           FontSize="8"
+                                           Margin="8,0,0,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource AppTextMutedBrush}"/>
+                            </Grid>
+                            <ToggleButton x:Name="PART_ToggleButton"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                          ClickMode="Press"
+                                          Focusable="False">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Rectangle Fill="Transparent"/>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <Popup x:Name="PART_Popup"
+                                   Placement="Bottom"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True"
+                                   Focusable="False">
+                                <Border Margin="0,4,0,0"
+                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                        Background="{DynamicResource AppSurfaceBrush}"
+                                        BorderBrush="{DynamicResource AppBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="8">
+                                    <ScrollViewer MaxHeight="220">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger SourceName="PART_ToggleButton" Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource AppAccentOutlineBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
+                                <Setter TargetName="ComboBorder" Property="BorderThickness" Value="2"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.6"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="SectionLabel" TargetType="TextBlock">
             <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="{DynamicResource AppTextSecondaryBrush}"/>
-            <Setter Property="Margin" Value="0,7,0,1"/>
+            <Setter Property="Margin" Value="0,12,0,5"/>
         </Style>
+        <DataTemplate x:Key="ConditionChip" DataType="{x:Type vm:ConditionEntry}">
+            <Border Margin="0,2,5,2" Padding="8,4" CornerRadius="12" Background="{DynamicResource AppInfoSurfaceBrush}">
+                <TextBlock Text="{Binding Value}" FontSize="11" Foreground="{DynamicResource AppInfoBrush}"/>
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="PostConditionChip" DataType="{x:Type vm:ConditionEntry}">
+            <Border Margin="0,2,5,2" Padding="8,4" CornerRadius="12" Background="{DynamicResource AppSuccessSurfaceBrush}">
+                <TextBlock Text="{Binding Value}" FontSize="11" Foreground="{DynamicResource AppSuccessBrush}"/>
+            </Border>
+        </DataTemplate>
     </UserControl.Resources>
 
     <Grid Background="{DynamicResource AppWindowBackgroundBrush}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="42"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="30"/>
         </Grid.RowDefinitions>
 
-        <!-- Hostable toolbar: this is content, not a window/title bar. -->
-        <Border Grid.Row="0"
-                Background="{DynamicResource AppSurfaceBrush}"
-                BorderBrush="{DynamicResource AppBorderBrush}"
-                BorderThickness="0,0,0,1"
-                Padding="14,0">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="{Binding ProjectName}"
-                               FontSize="13"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource AppTextPrimaryBrush}"
-                               TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Text="{Binding CurrentFilePath, TargetNullValue=未保存のプロジェクト}"
-                               FontSize="9"
-                               Foreground="{DynamicResource AppTextMutedBrush}"
-                               TextTrimming="CharacterEllipsis"
-                               ToolTip="{Binding CurrentFilePath}"/>
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="保存" Style="{StaticResource WorkspaceButton}" Command="{Binding SaveProjectCommand}"/>
-                    <Button Content="元に戻す" Style="{StaticResource WorkspaceButton}" Command="{Binding UndoLastActionCommand}"/>
-                    <Button Content="やり直す" Style="{StaticResource WorkspaceButton}" Command="{Binding RedoLastActionCommand}"/>
-                </StackPanel>
-            </Grid>
-        </Border>
-
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MinWidth="360"/>
-                <ColumnDefinition Width="340" MinWidth="260"/>
-            </Grid.ColumnDefinitions>
-
-            <controls:GanttCanvas x:Name="GanttView"
-                                  Grid.Column="0"
-                                  ItemsSource="{Binding FilteredItems}"
-                                  Edges="{Binding FilteredDependencyEdges}"
-                                  SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
-                                  Lanes="{Binding Lanes}"
-                                  Categories="{Binding Categories}"
-                                  TimeUnit="{Binding TimeUnit}"
-                                  TotalDuration="{Binding TotalDuration}"
-                                  CellDuration="{Binding CellDuration}"
-                                  PixelsPerUnit="{Binding PixelsPerUnit}"
-                                  CursorLaneIndex="{Binding CursorLaneIndex, Mode=TwoWay}"
-                                  CursorTime="{Binding CursorTime, Mode=TwoWay}"
-                                  IsVisualMode="{Binding IsVisualMode}"
-                                  IsVisualLineMode="{Binding IsVisualLineMode}"
-                                  VisualAnchorLane="{Binding VisualAnchorLane}"
-                                  VisualAnchorTime="{Binding VisualAnchorTime}"
-                                  CriticalPathItemIds="{Binding CriticalPathItemIds}"
-                                  SearchText="{Binding SearchHighlightText}"/>
-
-            <Border Grid.Column="1"
-                    Background="{DynamicResource AppSurfaceBrush}"
-                    BorderBrush="{DynamicResource AppBorderBrush}"
-                    BorderThickness="1,0,0,0">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,12">
-                    <Grid DataContext="{Binding SelectedItem}">
-                        <Grid.Style>
-                            <Style TargetType="Grid">
-                                <Setter Property="Visibility" Value="Visible"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding}" Value="{x:Null}">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Grid.Style>
-                        <StackPanel>
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock Text="インスペクター" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                                <Button Grid.Column="1" Content="削除" Style="{StaticResource WorkspaceButton}" Foreground="{DynamicResource AppDangerBrush}"
-                                        Command="{Binding DataContext.DeleteItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                        CommandParameter="{Binding}"/>
-                            </Grid>
-                            <TextBlock Text="タスク名" Style="{StaticResource WorkspaceLabel}"/>
-                            <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource WorkspaceInput}"/>
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0">
-                                    <TextBlock Text="開始" Style="{StaticResource WorkspaceLabel}"/>
-                                    <TextBox Text="{Binding StartTime, UpdateSourceTrigger=LostFocus}" Style="{StaticResource WorkspaceInput}"/>
-                                </StackPanel>
-                                <StackPanel Grid.Column="2">
-                                    <TextBlock Text="所要時間" Style="{StaticResource WorkspaceLabel}"/>
-                                    <TextBox Text="{Binding Duration, UpdateSourceTrigger=LostFocus}" Style="{StaticResource WorkspaceInput}"/>
-                                </StackPanel>
-                            </Grid>
-                            <TextBlock Text="説明" Style="{StaticResource WorkspaceLabel}"/>
-                            <TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource WorkspaceInput}" MinHeight="64" AcceptsReturn="True" TextWrapping="Wrap"/>
-                            <TextBlock Text="前提条件" Style="{StaticResource WorkspaceLabel}"/>
-                            <ItemsControl ItemsSource="{Binding PreConditions}">
-                                <ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="•  {Binding Value}" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,2"/></DataTemplate></ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <TextBox Text="{Binding NewPreCondition, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource WorkspaceInput}" ToolTip="前提条件を入力してEnter">
-                                <TextBox.InputBindings><KeyBinding Key="Return" Command="{Binding AddPreConditionCommand}"/></TextBox.InputBindings>
-                            </TextBox>
-                            <TextBlock Text="完了条件" Style="{StaticResource WorkspaceLabel}"/>
-                            <ItemsControl ItemsSource="{Binding PostConditions}">
-                                <ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="•  {Binding Value}" Foreground="{DynamicResource AppSuccessBrush}" Margin="0,2"/></DataTemplate></ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <TextBox Text="{Binding NewPostCondition, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource WorkspaceInput}" ToolTip="完了条件を入力してEnter">
-                                <TextBox.InputBindings><KeyBinding Key="Return" Command="{Binding AddPostConditionCommand}"/></TextBox.InputBindings>
-                            </TextBox>
+        <!-- The host owns the title bar and document actions. -->
+        <Grid Grid.Row="0" Margin="16,14,16,12">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" MinWidth="520"/><ColumnDefinition Width="14"/><ColumnDefinition Width="350" MinWidth="300" MaxWidth="430"/></Grid.ColumnDefinitions>
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions><RowDefinition Height="98"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                <Border Grid.Row="0" Background="{DynamicResource AppSurfaceBrush}" BorderBrush="{DynamicResource AppBorderSoftBrush}" BorderThickness="1" CornerRadius="10,10,0,0" Padding="16,10,16,10">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="40"/><RowDefinition Height="32"/></Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,18,0">
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,10,0"><TextBlock Text="タイムライン" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}"/><TextBlock Text="{Binding FilterSummary}" FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" Margin="0,2,0,0"/></StackPanel>
+                            <Border Background="{DynamicResource AppAccentSubtleBrush}" BorderBrush="{DynamicResource AppAccentOutlineBrush}" BorderThickness="1" CornerRadius="8" Padding="8,3"><StackPanel Orientation="Horizontal"><TextBlock Text="期間 " FontSize="10" Foreground="{DynamicResource AppTextSecondaryBrush}"/><TextBlock Text="{Binding ProjectDuration, Converter={StaticResource HmsConv}}" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AppAccentBrush}"/></StackPanel></Border>
+                        </StackPanel>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="空白をドラッグして作成　　バーをドラッグして移動・期間変更" VerticalAlignment="Center" FontSize="10" Foreground="{DynamicResource AppTextSecondaryBrush}" TextTrimming="CharacterEllipsis"/>
+                        <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Content="プロジェクト設定" Style="{StaticResource ToolbarButton}" Click="OnProjectSettingsClick"/>
+                            <Button Content="時間軸" Style="{StaticResource ToolbarButton}" Click="OnTimelineScaleClick"/>
+                            <TextBlock Text="倍率" FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <Button Content="−" Style="{StaticResource ToolbarButton}" Padding="8,4" Command="{Binding ZoomOutCommand}"/>
+                            <Button Command="{Binding ResetZoomCommand}" Background="{DynamicResource AppSurfaceAltBrush}" BorderThickness="0" Padding="8,5" Margin="3,0"><TextBlock Text="{Binding ZoomPercent, StringFormat={}{0:0}%}" FontSize="10" Foreground="{DynamicResource AppTextPrimaryBrush}"/></Button>
+                            <Button Content="＋" Style="{StaticResource ToolbarButton}" Padding="8,4" Command="{Binding ZoomInCommand}"/>
+                            <Button Content="＋ タスク" Style="{StaticResource PrimaryButton}" Padding="10,5" Margin="8,0,0,0" Command="{Binding AddItemCommand}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,0,0">
+                            <TextBox Width="220" Style="{StaticResource InputBox}" FontSize="11" ToolTip="タスク名・説明・レーンを検索" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"/>
+                            <Button Content="‹" Style="{StaticResource ToolbarButton}" Padding="9,4" Margin="5,0,0,0" Command="{Binding SelectPreviousMatchCommand}"/>
+                            <Button Content="›" Style="{StaticResource ToolbarButton}" Padding="9,4" Margin="2,0,10,0" Command="{Binding SelectNextMatchCommand}"/>
+                            <ComboBox Width="142" ItemsSource="{Binding CategoriesForFilter}" SelectedItem="{Binding SelectedFilterCategory, Mode=TwoWay}" Style="{StaticResource InputComboBox}" ToolTip="分類で絞り込む">
+                                <ComboBox.ItemTemplate><DataTemplate DataType="{x:Type vm:CategoryViewModel}"><TextBlock Text="{Binding Name}" Foreground="{DynamicResource AppTextPrimaryBrush}"/></DataTemplate></ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <Border Width="1" Height="20" Background="{DynamicResource AppBorderBrush}" Margin="10,0,10,0"/>
+                            <CheckBox Content="エラーのみ" Margin="10,0,0,0" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}" IsChecked="{Binding ShowErrorsOnly}"/>
                         </StackPanel>
                     </Grid>
-                </ScrollViewer>
-            </Border>
+                </Border>
+                <Border Grid.Row="1" Background="{DynamicResource AppSurfaceAltBrush}" BorderBrush="{DynamicResource AppBorderSoftBrush}" BorderThickness="1,0,1,1" CornerRadius="0,0,10,10">
+                    <controls:GanttCanvas x:Name="GanttView" ItemsSource="{Binding FilteredItems}" Edges="{Binding FilteredDependencyEdges}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}" Lanes="{Binding Lanes}" Categories="{Binding Categories}" TimeUnit="{Binding TimeUnit}" CellDuration="{Binding CellDuration}" TotalDuration="{Binding TotalDuration}" PixelsPerUnit="{Binding PixelsPerUnit}" CursorLaneIndex="{Binding CursorLaneIndex, Mode=TwoWay}" CursorTime="{Binding CursorTime, Mode=TwoWay}" IsVisualMode="{Binding IsVisualMode}" IsVisualLineMode="{Binding IsVisualLineMode}" VisualAnchorLane="{Binding VisualAnchorLane}" VisualAnchorTime="{Binding VisualAnchorTime}" CriticalPathItemIds="{Binding CriticalPathItemIds}" SearchText="{Binding SearchHighlightText}"/>
+                </Border>
+            </Grid>
 
-            <Border Grid.Column="1" Background="{DynamicResource AppSurfaceAltBrush}" Padding="18" Visibility="Collapsed">
-                <TextBlock Text="タイムラインからタスクを選択すると、ここにインスペクターが表示されます。" TextWrapping="Wrap" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+            <Border Grid.Column="2" Background="{DynamicResource AppSurfaceBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="10">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="66"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <Border Grid.Row="0" Background="{DynamicResource AppSurfaceAltBrush}" BorderBrush="{DynamicResource AppBorderSoftBrush}" BorderThickness="0,0,0,1" CornerRadius="10,10,0,0" Padding="16,12">
+                        <StackPanel><StackPanel Orientation="Horizontal"><Border Width="6" Height="20" CornerRadius="3" Background="{DynamicResource AppAccentBrush}" Margin="0,0,9,0"/><TextBlock Text="インスペクター" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}"/></StackPanel><TextBlock Text="選択中のタスクを編集" FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" Margin="15,3,0,0"/></StackPanel>
+                    </Border>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="16,14,16,20">
+                            <Border Background="{DynamicResource AppSurfaceAltBrush}" BorderBrush="{DynamicResource AppBorderSoftBrush}" BorderThickness="1" CornerRadius="9" Padding="12" Margin="0,0,0,10">
+                                <StackPanel><TextBlock Text="プロジェクト概要" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AppTextSecondaryBrush}"/><Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="タスク" FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"/><TextBlock Text="{Binding Items.Count}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}" Margin="0,2,0,0"/></StackPanel><StackPanel Grid.Column="1"><TextBlock Text="レーン" FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"/><TextBlock Text="{Binding Lanes.Count}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}" Margin="0,2,0,0"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="期間" FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"/><TextBlock Text="{Binding ProjectDuration, Converter={StaticResource HmsConv}}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource AppAccentBrush}" Margin="0,5,0,0" TextTrimming="CharacterEllipsis"/></StackPanel></Grid></StackPanel>
+                            </Border>
+                            <Border Background="{DynamicResource AppAccentSubtleBrush}" BorderBrush="{DynamicResource AppAccentOutlineBrush}" BorderThickness="1" CornerRadius="9" Padding="12" Margin="0,0,0,10">
+                                <StackPanel><TextBlock Text="タスクを選択または追加" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}"/><TextBlock Text="編集したいタスクをタイムラインから選択してください。新しいタスクもここから追加できます。" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,5,0,10"/><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Style="{StaticResource InputBox}" Text="{Binding NewItemName, UpdateSourceTrigger=PropertyChanged}"><TextBox.InputBindings><KeyBinding Key="Return" Command="{Binding AddItemCommand}"/></TextBox.InputBindings></TextBox><Button Grid.Column="1" Content="追加" Style="{StaticResource PrimaryButton}" Margin="6,0,0,0" Command="{Binding AddItemCommand}"/></Grid></StackPanel>
+                            </Border>
+                            <Grid DataContext="{Binding SelectedItem}">
+                                <Grid.Style><Style TargetType="Grid"><Setter Property="Visibility" Value="Visible"/><Style.Triggers><DataTrigger Binding="{Binding}" Value="{x:Null}"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></Grid.Style>
+                                <StackPanel>
+                                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="タスクの編集" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}"/><Button Grid.Column="1" Content="削除" Style="{StaticResource ToolbarButton}" Foreground="{DynamicResource AppDangerBrush}" Padding="8,5" Command="{Binding DataContext.DeleteItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"/></Grid>
+                                    <TextBlock Text="タスク名" Style="{StaticResource SectionLabel}"/><TextBox Style="{StaticResource InputBox}" FontSize="14" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="開始" Style="{StaticResource SectionLabel}"/><TextBox Style="{StaticResource InputBox}" Text="{Binding StartTime, Converter={StaticResource HmsConv}, UpdateSourceTrigger=LostFocus}"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="所要時間" Style="{StaticResource SectionLabel}"/><TextBox Style="{StaticResource InputBox}" Text="{Binding Duration, Converter={StaticResource HmsConv}, UpdateSourceTrigger=LostFocus}"/></StackPanel></Grid>
+                                    <TextBlock Text="レーン" Style="{StaticResource SectionLabel}"/><ComboBox ItemsSource="{Binding DataContext.Lanes, RelativeSource={RelativeSource AncestorType=UserControl}}" SelectedValuePath="Id" SelectedValue="{Binding LaneId}" Style="{StaticResource InputComboBox}"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Name}" Foreground="{DynamicResource AppTextPrimaryBrush}"/></DataTemplate></ComboBox.ItemTemplate></ComboBox>
+                                    <TextBlock Text="分類" Style="{StaticResource SectionLabel}"/><ComboBox ItemsSource="{Binding DataContext.CategoriesForPicker, RelativeSource={RelativeSource AncestorType=UserControl}}" SelectedValuePath="Id" SelectedValue="{Binding CategoryId}" Style="{StaticResource InputComboBox}"><ComboBox.ItemTemplate><DataTemplate DataType="{x:Type vm:CategoryViewModel}"><StackPanel Orientation="Horizontal"><Ellipse Width="10" Height="10" Fill="{Binding Brush}" Margin="0,0,7,0"/><TextBlock Text="{Binding Name}" Foreground="{DynamicResource AppTextPrimaryBrush}"/></StackPanel></DataTemplate></ComboBox.ItemTemplate></ComboBox>
+                                    <TextBlock Text="説明" Style="{StaticResource SectionLabel}"/><TextBox Style="{StaticResource InputBox}" MinHeight="58" AcceptsReturn="True" TextWrapping="Wrap" Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Text="開始条件" Style="{StaticResource SectionLabel}"/><ItemsControl ItemsSource="{Binding PreConditions}" ItemTemplate="{StaticResource ConditionChip}"/><TextBox Style="{StaticResource InputBox}" Text="{Binding NewPreCondition, UpdateSourceTrigger=PropertyChanged}"><TextBox.InputBindings><KeyBinding Key="Return" Command="{Binding AddPreConditionCommand}"/></TextBox.InputBindings></TextBox>
+                                    <TextBlock Text="完了条件" Style="{StaticResource SectionLabel}"/><ItemsControl ItemsSource="{Binding PostConditions}" ItemTemplate="{StaticResource PostConditionChip}"/><TextBox Style="{StaticResource InputBox}" Text="{Binding NewPostCondition, UpdateSourceTrigger=PropertyChanged}"><TextBox.InputBindings><KeyBinding Key="Return" Command="{Binding AddPostConditionCommand}"/></TextBox.InputBindings></TextBox>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
             </Border>
         </Grid>
 
-        <Border Grid.Row="2" Background="{DynamicResource AppSurfaceBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="12,0">
-            <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource AppTextSecondaryBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-        </Border>
+        <Border Grid.Row="1" Background="{DynamicResource AppWarningSurfaceBrush}" BorderBrush="{DynamicResource AppWarningBorderBrush}" BorderThickness="0,1,0,0" MaxHeight="92" Visibility="{Binding HasErrors, Converter={StaticResource BoolVis}}"><ScrollViewer VerticalScrollBarVisibility="Auto" Margin="18,5"><ItemsControl ItemsSource="{Binding Errors}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding Message}" FontSize="11" Foreground="{DynamicResource AppWarningTextBrush}" TextWrapping="Wrap" Margin="0,2"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></ScrollViewer></Border>
+        <Border Grid.Row="2" Background="{DynamicResource AppSurfaceBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0"><Grid Margin="12,0"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Border Background="{DynamicResource AppAccentBrush}" Padding="10,0" MinWidth="78"><TextBlock Text="{Binding VimModeLabel}" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AppAccentTextBrush}" FontFamily="Consolas" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><TextBlock Grid.Column="1" Text="{Binding StatusMessage}" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="10,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/><StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="表示 " FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"/><TextBlock Text="{Binding FilterSummary}" FontSize="10" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="2,0,12,0"/><TextBlock Text="レーン " FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"/><TextBlock Text="{Binding CursorLaneNumber}" FontSize="10" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="2,0,10,0"/><TextBlock Text="時刻 " FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"/><TextBlock Text="{Binding CursorTime, Converter={StaticResource HmsConv}}" FontSize="10" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="2,0,0,0"/></StackPanel></Grid></Border>
+
+        <Popup x:Name="TimelineScalePopup" Placement="Bottom" StaysOpen="False" AllowsTransparency="True"><Border Width="318" Padding="14" Background="{DynamicResource AppSurfaceBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="9"><StackPanel><TextBlock Text="時間軸の表示" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}"/><TextBlock Text="目盛り・表示範囲・グリッド間隔を調整します。" FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" TextWrapping="Wrap" Margin="0,3,0,12"/><TextBlock Text="目盛りの単位" Style="{StaticResource SectionLabel}"/><ComboBox ItemsSource="{x:Static vm:MainViewModel.TimeUnitOptions}" SelectedItem="{Binding TimeUnit}" Style="{StaticResource InputComboBox}"/><TextBlock Text="表示範囲" Style="{StaticResource SectionLabel}"/><TextBox Style="{StaticResource InputBox}" Text="{Binding TotalDuration, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Text="グリッド間隔" Style="{StaticResource SectionLabel}"/><TextBox Style="{StaticResource InputBox}" Text="{Binding CellDurationText, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Text="{Binding CellDurationSummary}" FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" Margin="0,6,0,0"/><TextBlock Text="{Binding CellDurationError}" FontSize="10" Foreground="{DynamicResource AppDangerBrush}" Margin="0,4,0,0"/></StackPanel></Border></Popup>
     </Grid>
 </UserControl>

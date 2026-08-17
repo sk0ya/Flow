@@ -77,6 +77,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _visualModeLabel   = "";
     [ObservableProperty] private string _vimModeLabel      = "NORMAL";
     [ObservableProperty] private bool   _isVimPromptActive = false;
+    [ObservableProperty] private bool   _vimEnabled        = true;
     [ObservableProperty] private string _vimPromptText     = "";
 
     [ObservableProperty] private string         _projectName = "新しいプロジェクト";
@@ -263,6 +264,7 @@ public partial class MainViewModel : ObservableObject
         _draftService = draftService ?? new ProjectDraftService();
         _exportService = exportService ?? new ProjectExportService();
         _appState = _appStateService.Load();
+        _vimEnabled = _appState.VimEnabled;
         _autoSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
         _autoSaveTimer.Tick += (_, _) => FlushAutoSave();
         _cellDurationTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
@@ -1766,6 +1768,15 @@ public partial class MainViewModel : ObservableObject
     {
         SyncSelectedRecentProject();
         OnPropertyChanged(nameof(SaveStateLabel));
+    }
+
+    partial void OnVimEnabledChanged(bool value)
+    {
+        if (_appState.VimEnabled == value)
+            return;
+
+        _appState.VimEnabled = value;
+        PersistAppState();
     }
 
     partial void OnTotalDurationChanged(double value)

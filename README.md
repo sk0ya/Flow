@@ -10,7 +10,7 @@ files and `Flow.Views.Controls.FlowWorkspaceControl` for embedding the timeline
 and inspector without Flow's window title bar.
 
 ```xml
-<PackageReference Include="Flow.Editor" Version="0.1.0" />
+<PackageReference Include="Flow.Editor" Version="0.1.5" />
 ```
 
 ```xml

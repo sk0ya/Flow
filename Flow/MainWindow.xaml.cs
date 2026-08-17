@@ -29,7 +29,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         _skipCloseConfirmation = false;
         var vm = new MainViewModel(startupProjectPath);
-        _vim = new VimController(vm, GanttView);
+        _vim = new VimController(vm, GanttView) { IsEnabled = vm.VimEnabled };
         InitializeWithViewModel(vm);
     }
 
@@ -37,7 +37,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _skipCloseConfirmation = true;
-        _vim = new VimController(vm, GanttView);
+        _vim = new VimController(vm, GanttView) { IsEnabled = vm.VimEnabled };
         InitializeWithViewModel(vm);
     }
 

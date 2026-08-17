@@ -15,6 +15,9 @@ public class StorageService
     public SequenceProject Load(string filePath)
     {
         var json = File.ReadAllText(filePath);
+        if (string.IsNullOrWhiteSpace(json))
+            return new SequenceProject();
+
         return JsonSerializer.Deserialize<SequenceProject>(json, StorageJson.Options) ?? new SequenceProject();
     }
 }
